@@ -512,6 +512,9 @@ try {
         echo '<p style="color: green; font-weight: bold;">✅ PDF erfolgreich generiert!</p>';
         echo '<p><strong>Datei:</strong> ' . htmlspecialchars($filename) . ' (' . $filesize . ' KB)</p>';
 
+        // JavaScript Debug
+        echo '<script>console.log("PDF generiert: ' . addslashes($filename) . '", "Pfad: ' . addslashes($filepath) . '", "Zu Array hinzugefügt");</script>';
+
         // Download-Link
         $download_url = $pdf_url . '/' . $filename;
         echo '<p><a href="' . esc_url($download_url) . '" target="_blank" style="background: #0073aa; color: white; padding: 8px 16px; text-decoration: none; display: inline-block; border-radius: 3px;">📄 PDF herunterladen</a></p>';
@@ -553,32 +556,45 @@ echo '<p style="color: red;"><strong>Fehler:</strong> ' . $error_count . '</p>';
 echo '<p><strong>Speicherort:</strong> <code>' . $pdf_dir . '</code></p>';
 echo '</div>';
 
+// JavaScript Debug für Zusammenfassung
+echo '<script>';
+echo 'console.log("=== ZUSAMMENFASSUNG ===");';
+echo 'console.log("Erfolgreiche PDFs:", ' . $success_count . ');';
+echo 'console.log("generated_files Array Länge:", ' . count($generated_files) . ');';
+echo 'console.log("isset year:", ' . (isset($_GET['year']) ? 'true' : 'false') . ');';
+echo 'console.log("Bedingung success_count > 1:", ' . ($success_count > 1 ? 'true' : 'false') . ');';
+echo 'console.log("ZIP-Bereich wird angezeigt:", ' . (($success_count > 1 && isset($_GET['year'])) ? 'true' : 'false') . ');';
+if (count($generated_files) > 0) {
+    echo 'console.log("Dateien im Array:", ' . json_encode(array_map('basename', $generated_files)) . ');';
+}
+echo 'console.log("ZipArchive verfügbar:", ' . (class_exists('ZipArchive') ? 'true' : 'false') . ');';
+echo '</script>';
+
 // ZIP-Download für Bulk-Generierung
 if ($success_count > 1 && isset($_GET['year'])) {
     echo '<div style="background: #e7f3ff; border: 2px solid #0073aa; padding: 20px; margin: 20px 0; text-align: center;">';
     echo '<h3 style="margin-top: 0;">📦 Alle PDFs herunterladen</h3>';
 
-    // DEBUG: Zeige Infos über generated_files Array
-    echo '<div style="background: #fff; padding: 15px; margin: 15px 0; border: 1px solid #ccc; text-align: left; font-size: 12px;">';
-    echo '<h4 style="margin: 0 0 10px 0;">🔍 DEBUG-INFO:</h4>';
-    echo '<p><strong>Erfolgreiche PDFs:</strong> ' . $success_count . '</p>';
-    echo '<p><strong>Einträge in generated_files Array:</strong> ' . count($generated_files) . '</p>';
+    // JavaScript Console Debug
+    echo '<script>';
+    echo 'console.log("=== ZIP DOWNLOAD BEREICH ===");';
+    echo 'console.log("Erfolgreiche PDFs:", ' . $success_count . ');';
+    echo 'console.log("generated_files Array:", ' . json_encode($generated_files) . ');';
+    echo 'console.log("Array Länge:", ' . count($generated_files) . ');';
+    echo 'console.log("PDF Dir:", "' . addslashes($pdf_dir) . '");';
+    echo 'console.log("Dir beschreibbar:", ' . (is_writable($pdf_dir) ? 'true' : 'false') . ');';
 
+    // Prüfe jede Datei
     if (count($generated_files) > 0) {
-        echo '<p><strong>Dateien im Array:</strong></p><ul style="text-align: left; margin: 5px 0;">';
         foreach ($generated_files as $file) {
-            $exists = file_exists($file) ? '✓' : '❌';
-            $filesize = file_exists($file) ? ' (' . round(filesize($file) / 1024, 1) . ' KB)' : ' (NICHT GEFUNDEN)';
-            echo '<li>' . $exists . ' ' . htmlspecialchars(basename($file)) . $filesize . '</li>';
+            $exists = file_exists($file);
+            $size = $exists ? filesize($file) : 0;
+            echo 'console.log("Datei: ' . addslashes(basename($file)) . '", "Existiert:", ' . ($exists ? 'true' : 'false') . ', "Größe:", ' . $size . ');';
         }
-        echo '</ul>';
     } else {
-        echo '<p style="color: red;"><strong>⚠️ PROBLEM: generated_files Array ist LEER!</strong></p>';
+        echo 'console.error("⚠️ PROBLEM: generated_files Array ist LEER!");';
     }
-
-    echo '<p><strong>PDF Verzeichnis:</strong> ' . htmlspecialchars($pdf_dir) . '</p>';
-    echo '<p><strong>Verzeichnis beschreibbar:</strong> ' . (is_writable($pdf_dir) ? '✓ Ja' : '❌ Nein') . '</p>';
-    echo '</div>';
+    echo '</script>';
 
     try {
         // Erstelle ZIP-Datei
@@ -590,70 +606,106 @@ if ($success_count > 1 && isset($_GET['year'])) {
         $zip_filepath = $pdf_dir . '/' . $zip_filename;
 
         echo '<p style="font-size: 12px;"><strong>ZIP-Datei:</strong> ' . htmlspecialchars($zip_filename) . '</p>';
+        echo '<script>console.log("ZIP-Dateiname:", "' . addslashes($zip_filename) . '");</script>';
+        echo '<script>console.log("ZIP-Pfad:", "' . addslashes($zip_filepath) . '");</script>';
 
         if (count($generated_files) === 0) {
             echo '<div style="background: #fff3cd; border: 2px solid #ffa500; padding: 15px; margin: 15px 0;">';
             echo '<p style="color: #856404; margin: 0;"><strong>⚠️ FEHLER:</strong> Keine Dateien zum Archivieren vorhanden!</p>';
             echo '<p style="color: #856404; margin: 10px 0 0 0;">Das generated_files Array ist leer. PDFs wurden möglicherweise nicht korrekt gespeichert.</p>';
             echo '</div>';
+            echo '<script>console.error("Keine Dateien im Array!");</script>';
         } else {
-            $zip = new ZipArchive();
-            $zip_open_result = $zip->open($zip_filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
-            echo '<p style="font-size: 12px;"><strong>ZIP open() Ergebnis:</strong> ' . ($zip_open_result === TRUE ? '✓ Erfolgreich' : '❌ Fehler-Code: ' . $zip_open_result) . '</p>';
-
-            if ($zip_open_result === TRUE) {
-
-                // Füge alle in dieser Session generierten PDFs zum ZIP hinzu
-                $added_count = 0;
-                $skipped_files = array();
-
-                foreach ($generated_files as $file) {
-                    if (file_exists($file)) {
-                        $filename = basename($file);
-                        $add_result = $zip->addFile($file, $filename);
-                        if ($add_result) {
-                            $added_count++;
-                        } else {
-                            $skipped_files[] = $filename . ' (addFile fehlgeschlagen)';
-                        }
-                    } else {
-                        $skipped_files[] = basename($file) . ' (Datei nicht gefunden)';
-                    }
-                }
-
-                $zip->close();
-
-                // DEBUG: Zeige Details
-                echo '<div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; margin: 10px 0; font-size: 12px;">';
-                echo '<p><strong>✓ ZIP erstellt:</strong> ' . $added_count . ' Dateien hinzugefügt</p>';
-                if (count($skipped_files) > 0) {
-                    echo '<p style="color: #856404;"><strong>Übersprungen:</strong> ' . implode(', ', $skipped_files) . '</p>';
-                }
+            // Prüfe ob ZipArchive verfügbar ist
+            if (!class_exists('ZipArchive')) {
+                echo '<div style="background: #f8d7da; border: 2px solid #dc3545; padding: 15px; margin: 15px 0;">';
+                echo '<p style="color: #721c24; margin: 0;"><strong>❌ FEHLER:</strong> ZipArchive Klasse nicht verfügbar!</p>';
+                echo '<p style="color: #721c24; margin: 10px 0 0 0;">PHP ZIP Extension ist nicht installiert.</p>';
                 echo '</div>';
-
-                if ($added_count > 0) {
-                    $zip_url = $pdf_url . '/' . $zip_filename;
-                    $zip_size = round(filesize($zip_filepath) / 1024, 2);
-
-                    echo '<p><strong>' . $added_count . ' PDFs im ZIP-Archiv</strong></p>';
-                    echo '<p>Dateigröße: ' . $zip_size . ' KB</p>';
-                    echo '<p style="margin-top: 20px;"><a href="' . esc_url($zip_url) . '" style="background: #0073aa; color: white; padding: 15px 40px; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">📥 ZIP herunterladen (' . $added_count . ' PDFs)</a></p>';
-                } else {
-                    echo '<p style="color: orange;">⚠️ Keine PDFs konnten zum ZIP hinzugefügt werden.</p>';
-                }
-
+                echo '<script>console.error("ZipArchive Klasse nicht verfügbar! ZIP Extension fehlt.");</script>';
             } else {
-                echo '<p style="color: red;">❌ ZIP konnte nicht erstellt werden. Fehler-Code: ' . $zip_open_result . '</p>';
+                $zip = new ZipArchive();
+                $zip_open_result = $zip->open($zip_filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+                echo '<script>console.log("ZIP->open() Ergebnis:", ' . ($zip_open_result === TRUE ? 'true' : '"Fehler-Code: ' . $zip_open_result . '"') . ');</script>';
+                echo '<p style="font-size: 12px;"><strong>ZIP open() Ergebnis:</strong> ' . ($zip_open_result === TRUE ? '✓ Erfolgreich' : '❌ Fehler-Code: ' . $zip_open_result) . '</p>';
+
+                if ($zip_open_result === TRUE) {
+
+                    // Füge alle in dieser Session generierten PDFs zum ZIP hinzu
+                    $added_count = 0;
+                    $skipped_files = array();
+
+                    echo '<script>console.log("Füge Dateien zum ZIP hinzu...");</script>';
+
+                    foreach ($generated_files as $file) {
+                        if (file_exists($file)) {
+                            $filename = basename($file);
+                            $add_result = $zip->addFile($file, $filename);
+                            echo '<script>console.log("addFile(' . addslashes($filename) . '):", ' . ($add_result ? 'true' : 'false') . ');</script>';
+                            if ($add_result) {
+                                $added_count++;
+                            } else {
+                                $skipped_files[] = $filename . ' (addFile fehlgeschlagen)';
+                            }
+                        } else {
+                            $skipped_files[] = basename($file) . ' (Datei nicht gefunden)';
+                            echo '<script>console.error("Datei nicht gefunden:", "' . addslashes(basename($file)) . '");</script>';
+                        }
+                    }
+
+                    $zip->close();
+
+                    echo '<script>console.log("ZIP geschlossen. Hinzugefügt:", ' . $added_count . ', "Übersprungen:", ' . count($skipped_files) . ');</script>';
+
+                    // DEBUG: Zeige Details
+                    echo '<div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; margin: 10px 0; font-size: 12px;">';
+                    echo '<p><strong>✓ ZIP erstellt:</strong> ' . $added_count . ' Dateien hinzugefügt</p>';
+                    if (count($skipped_files) > 0) {
+                        echo '<p style="color: #856404;"><strong>Übersprungen:</strong> ' . implode(', ', $skipped_files) . '</p>';
+                    }
+                    echo '</div>';
+
+                    if ($added_count > 0) {
+                        $zip_url = $pdf_url . '/' . $zip_filename;
+                        $zip_size = round(filesize($zip_filepath) / 1024, 2);
+
+                        echo '<script>console.log("✓ ZIP erfolgreich erstellt!");</script>';
+                        echo '<script>console.log("ZIP URL:", "' . addslashes($zip_url) . '");</script>';
+                        echo '<script>console.log("ZIP Größe:", ' . $zip_size . ', "KB");</script>';
+
+                        echo '<p><strong>' . $added_count . ' PDFs im ZIP-Archiv</strong></p>';
+                        echo '<p>Dateigröße: ' . $zip_size . ' KB</p>';
+                        echo '<p style="margin-top: 20px;"><a href="' . esc_url($zip_url) . '" style="background: #0073aa; color: white; padding: 15px 40px; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">📥 ZIP herunterladen (' . $added_count . ' PDFs)</a></p>';
+                    } else {
+                        echo '<script>console.error("Keine PDFs konnten zum ZIP hinzugefügt werden!");</script>';
+                        echo '<p style="color: orange;">⚠️ Keine PDFs konnten zum ZIP hinzugefügt werden.</p>';
+                    }
+
+                } else {
+                    echo '<script>console.error("ZIP->open() fehlgeschlagen! Fehler-Code:", ' . $zip_open_result . ');</script>';
+                    echo '<p style="color: red;">❌ ZIP konnte nicht erstellt werden. Fehler-Code: ' . $zip_open_result . '</p>';
+                }
             }
         }
 
     } catch (Exception $e) {
+        echo '<script>console.error("Exception beim ZIP erstellen:", "' . addslashes($e->getMessage()) . '");</script>';
+        echo '<script>console.error("Stack trace:", "' . addslashes($e->getTraceAsString()) . '");</script>';
         echo '<p style="color: red;">❌ Fehler beim Erstellen des ZIP: ' . htmlspecialchars($e->getMessage()) . '</p>';
         echo '<pre style="background: #f5f5f5; padding: 10px; text-align: left; font-size: 11px;">' . htmlspecialchars($e->getTraceAsString()) . '</pre>';
     }
 
     echo '</div>';
+} else {
+    // Debug warum ZIP-Bereich nicht angezeigt wird
+    echo '<script>console.log("ZIP-Bereich NICHT angezeigt. Grund:");</script>';
+    if ($success_count <= 1) {
+        echo '<script>console.log("- success_count zu niedrig:", ' . $success_count . ');</script>';
+    }
+    if (!isset($_GET['year'])) {
+        echo '<script>console.log("- year Parameter fehlt");</script>';
+    }
 }
 
 echo '<p style="margin-top: 30px;"><a href="?" style="background: #666; color: white; padding: 12px 30px; text-decoration: none; display: inline-block; border-radius: 5px;">← Zurück zum Generator</a></p>';
