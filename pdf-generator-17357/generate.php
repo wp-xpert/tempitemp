@@ -65,7 +65,6 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
 
                 <label>Monat wählen:</label>
                 <select name="month_num" required>
-                    <option value="">-- Monat wählen --</option>
                     <option value="01">Januar</option>
                     <option value="02">Februar</option>
                     <option value="03">März</option>
@@ -382,11 +381,11 @@ try {
     $replacements['[[PDFCOMPANYDETAILS]]'] = isset($settings['pdf_company_details']) ? wp_kses($settings['pdf_company_details'], $allowed_html) : '';
 
     // Invoice Number
-    $replacements['[[PDFINVOICENUMHEADING]]'] = __('Invoice Number', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICENUMHEADING]]'] = 'Rechnungsnummer';
     $replacements['[[PDFINVOICENUM]]'] = '<strong>' . esc_html($invoice_number) . '</strong>';
 
     // Order Number
-    $replacements['[[PDFORDERENUMHEADING]]'] = __('Order Number', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFORDERENUMHEADING]]'] = 'Bestellnummer';
     $replacements['[[PDFORDERENUM]]'] = esc_html($order->get_order_number());
 
     // Dates
@@ -395,20 +394,20 @@ try {
         $date_format = isset($settings['pdf_date_format']) ? $settings['pdf_date_format'] : 'd.m.Y';
         $invoice_date = $order->get_date_created()->date($date_format);
     }
-    $replacements['[[PDFINVOICEDATEHEADING]]'] = __('Invoice Date', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICEDATEHEADING]]'] = 'Rechnungsdatum';
     $replacements['[[PDFINVOICEDATE]]'] = esc_html($invoice_date);
-    $replacements['[[PDFORDERDATEHEADING]]'] = __('Order Date', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFORDERDATEHEADING]]'] = 'Bestelldatum';
     $replacements['[[PDFORDERDATE]]'] = $order->get_date_created()->date('d.m.Y');
 
     // Payment & Shipping Method
-    $replacements['[[PDFINVOICE_PAYMETHOD_HEADING]]'] = __('Payment Method', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICE_PAYMETHOD_HEADING]]'] = 'Zahlungsmethode';
     $replacements['[[PDFINVOICEPAYMENTMETHOD]]'] = esc_html($order->get_payment_method_title());
-    $replacements['[[PDFINVOICE_SHIPMETHOD_HEADING]]'] = __('Shipping Method', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICE_SHIPMETHOD_HEADING]]'] = 'Versandart';
     $replacements['[[PDFSHIPPINGMETHOD]]'] = esc_html($order->get_shipping_method());
     $replacements['[[PDFSHIPMENTTRACKING]]'] = '';
 
     // Billing Details - Behalte <br> Tags für Adressen
-    $replacements['[[PDFINVOICE_BILLINGDETAILS_HEADING]]'] = __('Billing Address', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICE_BILLINGDETAILS_HEADING]]'] = 'Rechnungsadresse';
     $billing_address = $order->get_formatted_billing_address();
     $replacements['[[PDFBILLINGADDRESS]]'] = wp_kses($billing_address, $allowed_html);
     $replacements['[[PDFBILLINGTEL]]'] = $order->get_billing_phone() ? 'Tel: ' . esc_html($order->get_billing_phone()) : '';
@@ -416,9 +415,9 @@ try {
     $replacements['[[PDFBILLINGVATNUMBER]]'] = '';
 
     // Shipping Details - Behalte <br> Tags für Adressen
-    $replacements['[[PDFINVOICE_SHIPPINGDETAILS_HEADING]]'] = __('Shipping Address', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICE_SHIPPINGDETAILS_HEADING]]'] = 'Lieferadresse';
     $shipping_address = $order->get_formatted_shipping_address();
-    $replacements['[[PDFSHIPPINGADDRESS]]'] = $shipping_address ? wp_kses($shipping_address, $allowed_html) : __('Same as billing', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFSHIPPINGADDRESS]]'] = $shipping_address ? wp_kses($shipping_address, $allowed_html) : 'Wie Rechnungsadresse';
 
     // Footer - Company Registration
     $registered_name = isset($settings['pdf_registered_name']) ? $settings['pdf_registered_name'] : '';
@@ -428,17 +427,17 @@ try {
 
     $replacements['[[PDFREGISTEREDNAME_SECTION]]'] = $registered_name ? esc_html($registered_name) : '';
     $replacements['[[PDFREGISTEREDADDRESS_SECTION]]'] = $registered_address ? esc_html($registered_address) : '';
-    $replacements['[[PDFCOMPANYNUMBER_SECTION]]'] = $company_number ? __('Company Number:', 'woocommerce-pdf-invoice') . ' ' . esc_html($company_number) : '';
-    $replacements['[[PDFTAXNUMBER_SECTION]]'] = $tax_number ? __('Tax Number:', 'woocommerce-pdf-invoice') . ' ' . esc_html($tax_number) : '';
+    $replacements['[[PDFCOMPANYNUMBER_SECTION]]'] = $company_number ? 'Firmennummer: ' . esc_html($company_number) : '';
+    $replacements['[[PDFTAXNUMBER_SECTION]]'] = $tax_number ? 'Steuernummer: ' . esc_html($tax_number) : '';
 
     // Order Items
     $orderinfo_html = '<table width="100%" cellpadding="5" cellspacing="0" style="border: 1px solid #ddd;">
         <thead>
             <tr style="background: #0073aa; color: white;">
-                <th style="text-align: left; padding: 10px;">' . __('Product', 'woocommerce-pdf-invoice') . '</th>
-                <th style="text-align: center; padding: 10px; width: 10%;">' . __('Qty', 'woocommerce-pdf-invoice') . '</th>
-                <th style="text-align: right; padding: 10px; width: 15%;">' . __('Price', 'woocommerce-pdf-invoice') . '</th>
-                <th style="text-align: right; padding: 10px; width: 15%;">' . __('Total', 'woocommerce-pdf-invoice') . '</th>
+                <th style="text-align: left; padding: 10px;">Produkt</th>
+                <th style="text-align: center; padding: 10px; width: 10%;">Menge</th>
+                <th style="text-align: right; padding: 10px; width: 15%;">Preis</th>
+                <th style="text-align: right; padding: 10px; width: 15%;">Gesamt</th>
             </tr>
         </thead>
         <tbody>';
@@ -466,13 +465,13 @@ try {
 
     // Order Totals
     $totals_html = '<tr>
-        <td style="text-align: right; padding: 5px 0;"><strong>' . __('Subtotal:', 'woocommerce-pdf-invoice') . '</strong></td>
+        <td style="text-align: right; padding: 5px 0;"><strong>Zwischensumme:</strong></td>
         <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_subtotal(), array('currency' => $order->get_currency())) . '</td>
     </tr>';
 
     if ($order->get_shipping_total() > 0) {
         $totals_html .= '<tr>
-            <td style="text-align: right; padding: 5px 0;"><strong>' . __('Shipping:', 'woocommerce-pdf-invoice') . '</strong></td>
+            <td style="text-align: right; padding: 5px 0;"><strong>Versand:</strong></td>
             <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_shipping_total(), array('currency' => $order->get_currency())) . '</td>
         </tr>';
     }
@@ -480,7 +479,7 @@ try {
     // Zeige Steuer nur wenn NICHT EU ohne Steuer
     if ($order->get_total_tax() > 0 && !$hide_tax) {
         $totals_html .= '<tr>
-            <td style="text-align: right; padding: 5px 0;"><strong>' . __('Tax:', 'woocommerce-pdf-invoice') . '</strong></td>
+            <td style="text-align: right; padding: 5px 0;"><strong>MwSt.:</strong></td>
             <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_total_tax(), array('currency' => $order->get_currency())) . '</td>
         </tr>';
     }
@@ -493,12 +492,12 @@ try {
     }
 
     $totals_html .= '<tr style="background: #0073aa; color: white;">
-        <td style="text-align: right; padding: 10px;"><strong>' . __('Total:', 'woocommerce-pdf-invoice') . '</strong></td>
+        <td style="text-align: right; padding: 10px;"><strong>Gesamt:</strong></td>
         <td style="text-align: right; padding: 10px;"><strong>' . wc_price($order->get_total(), array('currency' => $order->get_currency())) . '</strong></td>
     </tr>';
 
     $replacements['[[PDFORDERTOTALS]]'] = $totals_html;
-    $replacements['[[PDFORDERNOTES]]'] = $order->get_customer_note() ? '<p><strong>' . __('Order Notes:', 'woocommerce-pdf-invoice') . '</strong><br>' . nl2br(esc_html($order->get_customer_note())) . '</p>' : '';
+    $replacements['[[PDFORDERNOTES]]'] = $order->get_customer_note() ? '<p><strong>Bestellnotizen:</strong><br>' . nl2br(esc_html($order->get_customer_note())) . '</p>' : '';
 
     // CSS Placeholders
     $replacements['[[PDFPAIDINFULLOVERLAY]]'] = '';
