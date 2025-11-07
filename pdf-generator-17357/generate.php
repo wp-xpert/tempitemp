@@ -53,7 +53,7 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
         </div>
 
         <div class="box">
-            <h2>Alle Rechnungen eines Monats</h2>
+            <h2>Alle Rechnungen eines Jahres</h2>
             <form method="get">
                 <label>Jahr wählen:</label>
                 <select name="year" required style="margin-bottom: 15px;">
@@ -63,29 +63,13 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
                     <option value="2026">2026</option>
                 </select>
 
-                <label>Monat wählen:</label>
-                <select name="month_num" required>
-                    <option value="01">Januar</option>
-                    <option value="02">Februar</option>
-                    <option value="03">März</option>
-                    <option value="04">April</option>
-                    <option value="05">Mai</option>
-                    <option value="06">Juni</option>
-                    <option value="07">Juli</option>
-                    <option value="08">August</option>
-                    <option value="09">September</option>
-                    <option value="10">Oktober</option>
-                    <option value="11">November</option>
-                    <option value="12">Dezember</option>
-                </select>
-
                 <label style="margin-top: 20px;">
                     <input type="checkbox" name="no_tax_eu" value="1" style="width: auto; margin-right: 8px;">
                     EU-Rechnungen ohne Steuer generieren (außer Österreich)
                 </label>
 
                 <br><br>
-                <button type="submit" class="button">Alle PDFs des Monats generieren</button>
+                <button type="submit" class="button">Alle PDFs des Jahres generieren</button>
             </form>
         </div>
 
@@ -133,30 +117,21 @@ $eu_countries = array(
 $regenerate_eu = false;
 $no_tax_eu = false;
 
-// Bulk-Generierung für einen Monat oder EU-Regenerierung
+// Bulk-Generierung für ein Jahr
 if (isset($_GET['year'])) {
     // ALLERERSTER Console Log - um zu prüfen ob wir hier ankommen
     echo '<script>console.log("🚀 BULK-BEREICH ERREICHT - Jahr Parameter gefunden!");</script>';
 
     $year = intval($_GET['year']);
-    $month_num = isset($_GET['month_num']) && !empty($_GET['month_num']) ? sanitize_text_field($_GET['month_num']) : null;
     $regenerate_eu = isset($_GET['regenerate_eu']) && $_GET['regenerate_eu'] == '1';
     $no_tax_eu = isset($_GET['no_tax_eu']) && $_GET['no_tax_eu'] == '1';
 
-    echo '<script>console.log("Variablen geladen - Jahr:", ' . $year . ', "Monat:", "' . ($month_num ? $month_num : 'NULL') . '");</script>';
+    echo '<script>console.log("Variablen geladen - Jahr:", ' . $year . ');</script>';
 
-    // Erstelle Start- und Enddatum
-    if ($month_num) {
-        // Einzelner Monat
-        $start_timestamp = strtotime($year . '-' . $month_num . '-01 00:00:00');
-        $end_timestamp = strtotime(date('Y-m-t 23:59:59', $start_timestamp));
-        $period_label = date('F Y', $start_timestamp);
-    } else {
-        // Ganzes Jahr
-        $start_timestamp = strtotime($year . '-01-01 00:00:00');
-        $end_timestamp = strtotime($year . '-12-31 23:59:59');
-        $period_label = $year;
-    }
+    // Erstelle Start- und Enddatum für das ganze Jahr
+    $start_timestamp = strtotime($year . '-01-01 00:00:00');
+    $end_timestamp = strtotime($year . '-12-31 23:59:59');
+    $period_label = $year;
 
     echo '<h1>PDF Generator - ' . $period_label . '</h1>';
     if ($regenerate_eu) {
@@ -169,7 +144,6 @@ if (isset($_GET['year'])) {
     echo '<script>';
     echo 'console.log("=== BULK GENERIERUNG GESTARTET ===");';
     echo 'console.log("Jahr:", ' . $year . ');';
-    echo 'console.log("Monat:", "' . ($month_num ? $month_num : 'GANZES JAHR') . '");';
     echo 'console.log("Zeitraum:", "' . addslashes(date('d.m.Y', $start_timestamp)) . ' - ' . addslashes(date('d.m.Y', $end_timestamp)) . '");';
     echo 'console.log("Start Timestamp:", ' . $start_timestamp . ');';
     echo 'console.log("End Timestamp:", ' . $end_timestamp . ');';
@@ -180,7 +154,7 @@ if (isset($_GET['year'])) {
     // Debug: Zeige Datum-Range
     echo '<p><small>Debug - Start: ' . date('Y-m-d H:i:s', $start_timestamp) . ' | Ende: ' . date('Y-m-d H:i:s', $end_timestamp) . '</small></p>';
 
-    // Hole alle Bestellungen des Monats - verwende korrekte Status-Codes
+    // Hole alle Bestellungen des Jahres - verwende korrekte Status-Codes
     $order_args = array(
         'limit' => -1,
         'date_created' => '>=' . $start_timestamp,
@@ -635,11 +609,7 @@ if ($success_count > 1 && isset($_GET['year'])) {
 
     try {
         // Erstelle ZIP-Datei
-        if ($month_num) {
-            $zip_filename = 'rechnungen-' . $year . '-' . str_pad($month_num, 2, '0', STR_PAD_LEFT) . '.zip';
-        } else {
-            $zip_filename = 'rechnungen-' . $year . ($regenerate_eu ? '-EU' : '') . '.zip';
-        }
+        $zip_filename = 'rechnungen-' . $year . ($regenerate_eu ? '-EU' : '') . '.zip';
         $zip_filepath = $pdf_dir . '/' . $zip_filename;
 
         echo '<p style="font-size: 12px;"><strong>ZIP-Datei:</strong> ' . htmlspecialchars($zip_filename) . '</p>';
