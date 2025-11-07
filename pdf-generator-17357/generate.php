@@ -10,6 +10,10 @@
 // WordPress laden
 require_once(dirname(__FILE__) . '/../../../wp-load.php');
 
+// Error Reporting aktivieren für Debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Prüfungen
 if (!function_exists('wc_get_order')) die('WooCommerce nicht aktiv!');
 
@@ -17,8 +21,8 @@ if (!function_exists('wc_get_order')) die('WooCommerce nicht aktiv!');
 add_filter('woocommerce_email_enabled', '__return_false', 999);
 add_filter('pre_wp_mail', '__return_false', 999);
 
-// Zeige Interface wenn keine Order-ID übergeben wurde
-if (!isset($_GET['order_id']) && !isset($_GET['month'])) {
+// Zeige Interface wenn keine Order-ID und kein Jahr übergeben wurde
+if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
     ?>
     <!DOCTYPE html>
     <html>
@@ -144,10 +148,15 @@ $eu_countries = array(
 
 // Bulk-Generierung für einen Monat oder EU-Regenerierung
 if (isset($_GET['year'])) {
+    // ALLERERSTER Console Log - um zu prüfen ob wir hier ankommen
+    echo '<script>console.log("🚀 BULK-BEREICH ERREICHT - Jahr Parameter gefunden!");</script>';
+
     $year = intval($_GET['year']);
     $month_num = isset($_GET['month_num']) && !empty($_GET['month_num']) ? sanitize_text_field($_GET['month_num']) : null;
     $regenerate_eu = isset($_GET['regenerate_eu']) && $_GET['regenerate_eu'] == '1';
     $no_tax_eu = isset($_GET['no_tax_eu']) && $_GET['no_tax_eu'] == '1';
+
+    echo '<script>console.log("Variablen geladen - Jahr:", ' . $year . ', "Monat:", "' . ($month_num ? $month_num : 'NULL') . '");</script>';
 
     // Erstelle Start- und Enddatum
     if ($month_num) {
