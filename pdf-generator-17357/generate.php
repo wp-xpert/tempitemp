@@ -169,6 +169,18 @@ if (isset($_GET['year'])) {
     echo '<p>Zeitraum: ' . date('d.m.Y', $start_timestamp) . ' bis ' . date('d.m.Y', $end_timestamp) . '</p>';
     echo '<hr>';
 
+    // JavaScript Debug für Zeitraum
+    echo '<script>';
+    echo 'console.log("=== BULK GENERIERUNG GESTARTET ===");';
+    echo 'console.log("Jahr:", ' . $year . ');';
+    echo 'console.log("Monat:", "' . ($month_num ? $month_num : 'GANZES JAHR') . '");';
+    echo 'console.log("Zeitraum:", "' . addslashes(date('d.m.Y', $start_timestamp)) . ' - ' . addslashes(date('d.m.Y', $end_timestamp)) . '");';
+    echo 'console.log("Start Timestamp:", ' . $start_timestamp . ');';
+    echo 'console.log("End Timestamp:", ' . $end_timestamp . ');';
+    echo 'console.log("EU-Regenerierung:", ' . ($regenerate_eu ? 'true' : 'false') . ');';
+    echo 'console.log("No Tax EU:", ' . ($no_tax_eu ? 'true' : 'false') . ');';
+    echo '</script>';
+
     // Debug: Zeige Datum-Range
     echo '<p><small>Debug - Start: ' . date('Y-m-d H:i:s', $start_timestamp) . ' | Ende: ' . date('Y-m-d H:i:s', $end_timestamp) . '</small></p>';
 
@@ -195,6 +207,27 @@ if (isset($_GET['year'])) {
     }
 
     $orders = wc_get_orders($order_args);
+
+    // JavaScript Debug für gefundene Orders
+    echo '<script>';
+    echo 'console.log("Query ausgeführt. Gefundene Bestellungen:", ' . count($orders) . ');';
+    echo 'console.log("Query Args:", ' . json_encode($order_args) . ');';
+    if (count($orders) > 0) {
+        $order_infos = array();
+        foreach ($orders as $o) {
+            $order_infos[] = array(
+                'id' => $o->get_id(),
+                'date' => $o->get_date_created()->date('Y-m-d'),
+                'status' => $o->get_status(),
+                'country' => $o->get_billing_country()
+            );
+        }
+        echo 'console.log("Bestellungen Details:", ' . json_encode($order_infos) . ');';
+    } else {
+        echo 'console.error("⚠️ KEINE BESTELLUNGEN GEFUNDEN!");';
+        echo 'console.log("Prüfe ob Bestellungen im System existieren...");';
+    }
+    echo '</script>';
 
     echo '<p><strong>' . count($orders) . ' Bestellungen gefunden</strong></p>';
 
