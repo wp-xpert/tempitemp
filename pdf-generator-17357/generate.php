@@ -82,23 +82,49 @@ if (isset($_GET['month'])) {
     $month = sanitize_text_field($_GET['month']);
     list($year, $month_num) = explode('-', $month);
 
-    $start_date = $year . '-' . $month_num . '-01 00:00:00';
-    $end_date = date('Y-m-t 23:59:59', strtotime($start_date));
+    // Erstelle Start- und Enddatum
+    $start_timestamp = strtotime($year . '-' . $month_num . '-01 00:00:00');
+    $end_timestamp = strtotime(date('Y-m-t 23:59:59', $start_timestamp));
 
-    echo '<h1>PDF Generator - ' . date('F Y', strtotime($start_date)) . '</h1>';
-    echo '<p>Zeitraum: ' . date('d.m.Y', strtotime($start_date)) . ' bis ' . date('d.m.Y', strtotime($end_date)) . '</p>';
+    echo '<h1>PDF Generator - ' . date('F Y', $start_timestamp) . '</h1>';
+    echo '<p>Zeitraum: ' . date('d.m.Y', $start_timestamp) . ' bis ' . date('d.m.Y', $end_timestamp) . '</p>';
     echo '<hr>';
 
-    // Hole alle Bestellungen des Monats
+    // Debug: Zeige Datum-Range
+    echo '<p><small>Debug - Start: ' . date('Y-m-d H:i:s', $start_timestamp) . ' | Ende: ' . date('Y-m-d H:i:s', $end_timestamp) . '</small></p>';
+
+    // Hole alle Bestellungen des Monats - verwende korrekte Status-Codes
     $orders = wc_get_orders(array(
         'limit' => -1,
-        'date_created' => $start_date . '...' . $end_date,
-        'status' => array('wc-completed', 'wc-processing'),
+        'date_created' => '>=' . $start_timestamp,
+        'date_created_before' => '<=' . $end_timestamp,
+        'status' => array('completed', 'processing', 'on-hold'), // Ohne 'wc-' Präfix
         'orderby' => 'date',
         'order' => 'ASC'
     ));
 
     echo '<p><strong>' . count($orders) . ' Bestellungen gefunden</strong></p>';
+
+    // Debug: Zeige alle verfügbaren Bestellungen
+    if (count($orders) === 0) {
+        echo '<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; margin: 15px 0;">';
+        echo '<p><strong>Debug-Info: Keine Bestellungen gefunden. Prüfe alle Bestellungen...</strong></p>';
+
+        // Hole ALLE Bestellungen ohne Filter
+        $all_orders = wc_get_orders(array(
+            'limit' => 10,
+            'orderby' => 'date',
+            'order' => 'DESC'
+        ));
+
+        echo '<p>Letzte 10 Bestellungen im System:</p><ul>';
+        foreach ($all_orders as $test_order) {
+            $order_date = $test_order->get_date_created();
+            echo '<li>Order #' . $test_order->get_id() . ' - Status: ' . $test_order->get_status() . ' - Datum: ' . $order_date->date('d.m.Y H:i:s') . '</li>';
+        }
+        echo '</ul></div>';
+    }
+
     echo '<hr>';
 
     $order_ids = array();
