@@ -2,112 +2,157 @@
 /**
  * PDF Generator für Order #17357
  *
- * Aufruf per URL: /wp-content/plugins/pdf-generator-17357/generate.php
+ * Minimalistisch - nutzt woocommerce-pdf-invoice Plugin
+ * Aufruf: /wp-content/plugins/pdf-generator-17357/generate.php
  */
 
 // WordPress laden
-$wp_load = dirname(__FILE__) . '/../../../wp-load.php';
-if (!file_exists($wp_load)) {
-    die('WordPress nicht gefunden!');
-}
-require_once($wp_load);
+require_once(dirname(__FILE__) . '/../../../wp-load.php');
 
-// Prüfe ob WooCommerce aktiv ist
-if (!function_exists('wc_get_order')) {
-    die('WooCommerce nicht aktiv!');
-}
+// Prüfungen
+if (!function_exists('wc_get_order')) die('WooCommerce nicht aktiv!');
 
 // Order ID
 $order_id = 17357;
-
-// Hole Bestellung
 $order = wc_get_order($order_id);
-if (!$order) {
-    die('Bestellung #' . $order_id . ' nicht gefunden!');
-}
-
-echo '<h1>PDF Generator für Order #' . $order_id . '</h1>';
-echo '<p>Bestellnummer: ' . $order->get_order_number() . '</p>';
-echo '<p>Kunde: ' . $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() . '</p>';
-echo '<hr>';
+if (!$order) die('Bestellung #' . $order_id . ' nicht gefunden!');
 
 // E-Mails blockieren
 add_filter('woocommerce_email_enabled', '__return_false', 999);
 add_filter('pre_wp_mail', '__return_false', 999);
 
-// Setze Rechnungsnummer falls nicht vorhanden
-if (!class_exists('WC_pdf_functions')) {
-    $functions_file = WP_PLUGIN_DIR . '/woocommerce-pdf-invoice/classes/class-pdf-functions-class.php';
-    if (file_exists($functions_file)) {
-        require_once($functions_file);
-    }
+echo '<h1>PDF Generator - Order #' . $order_id . '</h1>';
+echo '<p>Kunde: ' . $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() . '</p>';
+echo '<p>E-Mail: ' . $order->get_billing_email() . '</p>';
+echo '<hr>';
+
+// Lade WooCommerce PDF Invoice Klassen
+$wc_pdf_plugin = WP_PLUGIN_DIR . '/woocommerce-pdf-invoice';
+
+if (!is_dir($wc_pdf_plugin)) {
+    die('❌ WooCommerce PDF Invoice Plugin nicht gefunden!');
 }
 
-if (class_exists('WC_pdf_functions')) {
-    if (!$order->get_meta('_invoice_number_display', true)) {
-        WC_pdf_functions::set_invoice_number($order_id);
-        echo '<p>✓ Rechnungsnummer gesetzt</p>';
-    }
-    $invoice_number = $order->get_meta('_invoice_number_display', true);
-    echo '<p>Rechnungsnummer: ' . $invoice_number . '</p>';
-} else {
-    echo '<p style="color:orange;">⚠ WC_pdf_functions Klasse nicht gefunden - nutze Order-Nummer</p>';
-    $invoice_number = $order->get_order_number();
+// Lade benötigte Klassen
+require_once($wc_pdf_plugin . '/classes/class-pdf-functions-class.php');
+require_once($wc_pdf_plugin . '/classes/helper-functions-class.php');
+
+// Setze Rechnungsnummer
+if (!$order->get_meta('_invoice_number_display', true)) {
+    WC_pdf_functions::set_invoice_number($order_id);
+    WC_pdf_functions::set_invoice_date($order_id);
+    echo '✓ Rechnungsnummer gesetzt<br>';
 }
 
-// Lade WC_send_pdf Klasse
-if (!class_exists('WC_send_pdf')) {
-    $send_pdf_file = WP_PLUGIN_DIR . '/woocommerce-pdf-invoice/classes/class-pdf-send-pdf-class.php';
+$invoice_number = $order->get_meta('_invoice_number_display', true);
+echo '✓ Rechnungsnummer: <strong>' . ($invoice_number ?: 'N/A') . '</strong><br>';
+echo '<hr>';
 
-    // Die Datei wurde überschrieben, also nutzen wir die helper Funktionen
-    $helper_file = WP_PLUGIN_DIR . '/woocommerce-pdf-invoice/classes/helper-functions-class.php';
-    if (file_exists($helper_file)) {
-        require_once($helper_file);
-    }
-}
-
-// PDF generieren mit eigener Methode (da WC_send_pdf überschrieben wurde)
+// PDF generieren
 try {
-    // Prüfe ob PDF-Klassen verfügbar sind
-    $pdf_created = false;
-    $pdf_path = '';
+    // Finde die originale WC_send_pdf Klasse im Backup oder im Original-Plugin
+    $original_send_pdf = null;
 
-    // Versuche 1: Über WooCommerce PDF Invoice Plugin
-    if (class_exists('WC_send_pdf') && method_exists('WC_send_pdf', 'get_woocommerce_pdf_invoice')) {
-        $pdf_path = WC_send_pdf::get_woocommerce_pdf_invoice($order, 'customer_completed_order', false);
-        if ($pdf_path && file_exists($pdf_path)) {
-            $pdf_created = true;
-            echo '<p>✓ PDF generiert über WC_send_pdf</p>';
+    // Suche in allen möglichen Orten
+    $possible_locations = [
+        $wc_pdf_plugin . '/classes/class-pdf-send-pdf-class.php.backup',
+        $wc_pdf_plugin . '/classes/class-send-pdf.php',
+    ];
+
+    // Lies die originale Datei, falls vorhanden
+    foreach ($possible_locations as $loc) {
+        if (file_exists($loc)) {
+            $original_send_pdf = $loc;
+            break;
         }
     }
 
-    // Versuche 2: Über direkte Template-Generierung
-    if (!$pdf_created) {
-        $template_file = WP_PLUGIN_DIR . '/woocommerce-pdf-invoice/lib/dompdf/autoload.inc.php';
-        if (file_exists($template_file)) {
-            require_once($template_file);
+    // Fallback: Lade Template-basierte Generierung
+    if (!class_exists('WC_send_pdf')) {
+        // Nutze Dompdf direkt
+        $dompdf_autoload = $wc_pdf_plugin . '/lib/dompdf/autoload.inc.php';
 
-            // Generiere HTML für PDF
-            $html = '<h1>Rechnung ' . $invoice_number . '</h1>';
-            $html .= '<p>Bestellung: ' . $order->get_order_number() . '</p>';
-            $html .= '<p>Datum: ' . $order->get_date_created()->date('d.m.Y') . '</p>';
-            $html .= '<h2>Kunde</h2>';
-            $html .= '<p>' . $order->get_formatted_billing_address() . '</p>';
+        if (file_exists($dompdf_autoload)) {
+            require_once($dompdf_autoload);
 
-            $html .= '<h2>Bestellte Artikel</h2>';
-            $html .= '<table border="1" cellpadding="5" style="width:100%;border-collapse:collapse;">';
-            $html .= '<tr><th>Produkt</th><th>Menge</th><th>Preis</th></tr>';
+            echo '✓ Dompdf geladen<br>';
+
+            // Generiere HTML
+            $html = '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12pt; }
+        h1 { color: #333; border-bottom: 2px solid #0073aa; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #f5f5f5; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .total { font-weight: bold; font-size: 14pt; }
+    </style>
+</head>
+<body>
+    <h1>Rechnung ' . ($invoice_number ?: $order->get_order_number()) . '</h1>
+
+    <p><strong>Bestellnummer:</strong> ' . $order->get_order_number() . '<br>
+    <strong>Datum:</strong> ' . $order->get_date_created()->date('d.m.Y') . '</p>
+
+    <h2>Kunde</h2>
+    <p>' . nl2br($order->get_formatted_billing_address()) . '<br>
+    E-Mail: ' . $order->get_billing_email() . '</p>
+
+    <h2>Bestellte Artikel</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Produkt</th>
+                <th style="text-align:center">Menge</th>
+                <th style="text-align:right">Einzelpreis</th>
+                <th style="text-align:right">Gesamt</th>
+            </tr>
+        </thead>
+        <tbody>';
 
             foreach ($order->get_items() as $item) {
-                $html .= '<tr>';
-                $html .= '<td>' . $item->get_name() . '</td>';
-                $html .= '<td>' . $item->get_quantity() . '</td>';
-                $html .= '<td>' . wc_price($order->get_line_total($item)) . '</td>';
-                $html .= '</tr>';
+                $html .= '<tr>
+                    <td>' . $item->get_name() . '</td>
+                    <td style="text-align:center">' . $item->get_quantity() . '</td>
+                    <td style="text-align:right">' . wc_price($order->get_item_subtotal($item, false, false)) . '</td>
+                    <td style="text-align:right">' . wc_price($order->get_line_subtotal($item, false, false)) . '</td>
+                </tr>';
             }
 
-            $html .= '</table>';
-            $html .= '<p><strong>Gesamt: ' . wc_price($order->get_total()) . '</strong></p>';
+            $html .= '</tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3" style="text-align:right"><strong>Zwischensumme:</strong></td>
+                <td style="text-align:right">' . wc_price($order->get_subtotal()) . '</td>
+            </tr>';
+
+            if ($order->get_shipping_total() > 0) {
+                $html .= '<tr>
+                    <td colspan="3" style="text-align:right"><strong>Versand:</strong></td>
+                    <td style="text-align:right">' . wc_price($order->get_shipping_total()) . '</td>
+                </tr>';
+            }
+
+            if ($order->get_total_tax() > 0) {
+                $html .= '<tr>
+                    <td colspan="3" style="text-align:right"><strong>MwSt.:</strong></td>
+                    <td style="text-align:right">' . wc_price($order->get_total_tax()) . '</td>
+                </tr>';
+            }
+
+            $html .= '<tr>
+                <td colspan="3" style="text-align:right" class="total">GESAMT:</td>
+                <td style="text-align:right" class="total">' . wc_price($order->get_total()) . '</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <p style="margin-top:40px;"><small>Vielen Dank für Ihren Einkauf!</small></p>
+</body>
+</html>';
 
             // PDF erstellen
             $dompdf = new Dompdf\Dompdf();
@@ -115,59 +160,39 @@ try {
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
-            // PDF speichern
-            $filename = 'invoice-' . sanitize_file_name($invoice_number) . '.pdf';
-            $pdf_path = __DIR__ . '/' . $filename;
-            file_put_contents($pdf_path, $dompdf->output());
+            // Dateiname
+            $filename = 'invoice-' . sanitize_file_name($invoice_number ?: $order_id) . '.pdf';
+            $filepath = __DIR__ . '/' . $filename;
 
-            if (file_exists($pdf_path)) {
-                $pdf_created = true;
-                echo '<p>✓ PDF generiert mit Dompdf</p>';
-            }
-        }
-    }
+            // Speichern
+            file_put_contents($filepath, $dompdf->output());
 
-    // Speichere PDF im Plugin-Ordner
-    if ($pdf_created && $pdf_path && file_exists($pdf_path)) {
-        $target_filename = 'invoice-' . sanitize_file_name($invoice_number) . '-' . $order_id . '.pdf';
-        $target_path = __DIR__ . '/' . $target_filename;
-
-        // Wenn es ein temp-Pfad ist, kopiere es, sonst verschiebe es
-        if (strpos($pdf_path, sys_get_temp_dir()) !== false || strpos($pdf_path, '/tmp/') !== false) {
-            if (copy($pdf_path, $target_path)) {
-                @unlink($pdf_path);
-                echo '<p style="color:green;"><strong>✅ PDF erfolgreich gespeichert!</strong></p>';
-                echo '<p>Datei: ' . $target_filename . '</p>';
-                echo '<p>Pfad: ' . $target_path . '</p>';
-                echo '<p>Größe: ' . round(filesize($target_path) / 1024, 2) . ' KB</p>';
+            if (file_exists($filepath)) {
+                $filesize = round(filesize($filepath) / 1024, 2);
+                echo '<p style="color:green;font-size:16pt;"><strong>✅ PDF erfolgreich generiert!</strong></p>';
+                echo '<p><strong>Datei:</strong> ' . $filename . '<br>';
+                echo '<strong>Größe:</strong> ' . $filesize . ' KB<br>';
+                echo '<strong>Pfad:</strong> ' . $filepath . '</p>';
 
                 // Download-Link
-                $plugin_url = plugins_url('/' . $target_filename, __FILE__);
-                echo '<p><a href="' . $plugin_url . '" target="_blank" style="background:#0073aa;color:white;padding:10px 20px;text-decoration:none;display:inline-block;margin-top:10px;">📄 PDF herunterladen</a></p>';
-            } else {
-                echo '<p style="color:red;">✗ Fehler beim Kopieren der PDF</p>';
-            }
-        } else {
-            // Ist bereits im richtigen Ordner oder anderer Pfad
-            if (rename($pdf_path, $target_path)) {
-                echo '<p style="color:green;"><strong>✅ PDF erfolgreich gespeichert!</strong></p>';
-                echo '<p>Datei: ' . $target_filename . '</p>';
-                echo '<p>Pfad: ' . $target_path . '</p>';
-                echo '<p>Größe: ' . round(filesize($target_path) / 1024, 2) . ' KB</p>';
+                $download_url = plugins_url($filename, __FILE__);
+                echo '<p><a href="' . $download_url . '" target="_blank" style="background:#0073aa;color:white;padding:15px 30px;text-decoration:none;display:inline-block;margin-top:20px;border-radius:5px;font-size:14pt;">📄 PDF herunterladen</a></p>';
 
-                $plugin_url = plugins_url('/' . $target_filename, __FILE__);
-                echo '<p><a href="' . $plugin_url . '" target="_blank" style="background:#0073aa;color:white;padding:10px 20px;text-decoration:none;display:inline-block;margin-top:10px;">📄 PDF herunterladen</a></p>';
+                // Direkter Download starten
+                echo '<script>window.open("' . $download_url . '", "_blank");</script>';
             } else {
-                echo '<p style="color:red;">✗ Fehler beim Verschieben der PDF</p>';
+                echo '<p style="color:red;">❌ Fehler beim Speichern der PDF!</p>';
             }
+
+        } else {
+            echo '<p style="color:red;">❌ Dompdf nicht gefunden!</p>';
+            echo '<p>Pfad: ' . $dompdf_autoload . '</p>';
         }
-    } else {
-        echo '<p style="color:red;"><strong>✗ PDF konnte nicht generiert werden!</strong></p>';
-        echo '<p>Bitte stelle sicher, dass das WooCommerce PDF Invoice Plugin korrekt installiert ist.</p>';
     }
 
 } catch (Exception $e) {
-    echo '<p style="color:red;">Fehler: ' . $e->getMessage() . '</p>';
+    echo '<p style="color:red;">❌ Fehler: ' . $e->getMessage() . '</p>';
+    echo '<pre>' . $e->getTraceAsString() . '</pre>';
 }
 
 echo '<hr>';
