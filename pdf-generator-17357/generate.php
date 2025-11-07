@@ -75,8 +75,58 @@ if (!isset($_GET['order_id']) && !isset($_GET['month'])) {
                     <option value="11">November</option>
                     <option value="12">Dezember</option>
                 </select>
+
+                <label style="margin-top: 20px;">
+                    <input type="checkbox" name="no_tax_eu" value="1" style="width: auto; margin-right: 8px;">
+                    EU-Rechnungen ohne Steuer generieren (außer Österreich)
+                </label>
+
                 <br><br>
                 <button type="submit" class="button">Alle PDFs des Monats generieren</button>
+            </form>
+        </div>
+
+        <div class="box" style="background: #fff8dc; border: 2px solid #ffa500;">
+            <h2>🇪🇺 Alle EU-Rechnungen neu generieren (ohne Steuer)</h2>
+            <p style="font-size: 14px; color: #666;">
+                <strong>Wichtig:</strong> Für EU-Länder (außer Österreich) darf keine Steuer ausgewiesen werden.<br>
+                Diese Option generiert ALLE Rechnungen von EU-Kunden ohne Steuerangabe neu.
+            </p>
+            <form method="get">
+                <input type="hidden" name="regenerate_eu" value="1">
+                <input type="hidden" name="no_tax_eu" value="1">
+
+                <label>Zeitraum wählen:</label>
+                <select name="year" required style="margin-bottom: 15px;">
+                    <option value="">-- Jahr wählen --</option>
+                    <option value="2024">2024</option>
+                    <option value="2025" selected>2025</option>
+                    <option value="2026">2026</option>
+                </select>
+
+                <label>Monat (optional - leer lassen für ganzes Jahr):</label>
+                <select name="month_num">
+                    <option value="">-- Ganzes Jahr --</option>
+                    <option value="01">Januar</option>
+                    <option value="02">Februar</option>
+                    <option value="03">März</option>
+                    <option value="04">April</option>
+                    <option value="05">Mai</option>
+                    <option value="06">Juni</option>
+                    <option value="07">Juli</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">Oktober</option>
+                    <option value="11">November</option>
+                    <option value="12">Dezember</option>
+                </select>
+
+                <br><br>
+                <button type="submit" class="button" style="background: #ffa500;">🇪🇺 Nur EU-Rechnungen ohne Steuer generieren</button>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    ✓ Kunden werden NICHT benachrichtigt<br>
+                    ✓ Nur Bestellungen aus EU-Ländern (außer AT)
+                </p>
             </form>
         </div>
     </body>
@@ -85,16 +135,37 @@ if (!isset($_GET['order_id']) && !isset($_GET['month'])) {
     exit;
 }
 
-// Bulk-Generierung für einen Monat
-if (isset($_GET['year']) && isset($_GET['month_num'])) {
+// EU-Länder Liste (ISO-2 Codes, ohne Österreich)
+$eu_countries = array(
+    'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE',
+    'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL',
+    'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
+);
+
+// Bulk-Generierung für einen Monat oder EU-Regenerierung
+if (isset($_GET['year'])) {
     $year = intval($_GET['year']);
-    $month_num = sanitize_text_field($_GET['month_num']);
+    $month_num = isset($_GET['month_num']) && !empty($_GET['month_num']) ? sanitize_text_field($_GET['month_num']) : null;
+    $regenerate_eu = isset($_GET['regenerate_eu']) && $_GET['regenerate_eu'] == '1';
+    $no_tax_eu = isset($_GET['no_tax_eu']) && $_GET['no_tax_eu'] == '1';
 
     // Erstelle Start- und Enddatum
-    $start_timestamp = strtotime($year . '-' . $month_num . '-01 00:00:00');
-    $end_timestamp = strtotime(date('Y-m-t 23:59:59', $start_timestamp));
+    if ($month_num) {
+        // Einzelner Monat
+        $start_timestamp = strtotime($year . '-' . $month_num . '-01 00:00:00');
+        $end_timestamp = strtotime(date('Y-m-t 23:59:59', $start_timestamp));
+        $period_label = date('F Y', $start_timestamp);
+    } else {
+        // Ganzes Jahr
+        $start_timestamp = strtotime($year . '-01-01 00:00:00');
+        $end_timestamp = strtotime($year . '-12-31 23:59:59');
+        $period_label = $year;
+    }
 
-    echo '<h1>PDF Generator - ' . date('F Y', $start_timestamp) . '</h1>';
+    echo '<h1>PDF Generator - ' . $period_label . '</h1>';
+    if ($regenerate_eu) {
+        echo '<p style="background: #fff3cd; padding: 10px; border: 2px solid #ffa500;">🇪🇺 <strong>EU-Regenerierung:</strong> Nur EU-Länder (außer Österreich), OHNE Steuer</p>';
+    }
     echo '<p>Zeitraum: ' . date('d.m.Y', $start_timestamp) . ' bis ' . date('d.m.Y', $end_timestamp) . '</p>';
     echo '<hr>';
 
@@ -102,14 +173,28 @@ if (isset($_GET['year']) && isset($_GET['month_num'])) {
     echo '<p><small>Debug - Start: ' . date('Y-m-d H:i:s', $start_timestamp) . ' | Ende: ' . date('Y-m-d H:i:s', $end_timestamp) . '</small></p>';
 
     // Hole alle Bestellungen des Monats - verwende korrekte Status-Codes
-    $orders = wc_get_orders(array(
+    $order_args = array(
         'limit' => -1,
         'date_created' => '>=' . $start_timestamp,
         'date_created_before' => '<=' . $end_timestamp,
         'status' => array('pending', 'on-hold', 'processing', 'completed'), // Alle Status inkl. pending
         'orderby' => 'date',
         'order' => 'ASC'
-    ));
+    );
+
+    // Filtere nur EU-Länder wenn EU-Regenerierung aktiv
+    if ($regenerate_eu) {
+        $order_args['meta_query'] = array(
+            array(
+                'key' => '_billing_country',
+                'value' => $eu_countries,
+                'compare' => 'IN'
+            )
+        );
+        echo '<p style="background: #e7f3ff; padding: 10px; border: 1px solid #0073aa;">🔍 Filtere nur Bestellungen aus EU-Ländern: ' . implode(', ', $eu_countries) . '</p>';
+    }
+
+    $orders = wc_get_orders($order_args);
 
     echo '<p><strong>' . count($orders) . ' Bestellungen gefunden</strong></p>';
 
@@ -200,8 +285,20 @@ foreach ($order_ids as $current_order_id) {
         continue;
     }
 
+    // Prüfe ob dieser Order EU ist (für Tax-Behandlung)
+    $billing_country = $order->get_billing_country();
+    $is_eu_order = in_array($billing_country, $eu_countries);
+    $hide_tax = ($no_tax_eu && $is_eu_order);
+
     echo '<div style="border: 1px solid #ddd; padding: 15px; margin: 15px 0; background: #fff;">';
     echo '<h3>Order #' . $current_order_id . ' - ' . $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() . '</h3>';
+
+    // Zeige Land-Info bei EU-Regenerierung
+    if ($regenerate_eu || $no_tax_eu) {
+        $country_flag = $is_eu_order ? '🇪🇺' : '🏳️';
+        $country_style = $is_eu_order ? 'background: #fff3cd; color: #856404;' : 'background: #e7f3ff; color: #004085;';
+        echo '<p style="' . $country_style . ' padding: 5px 10px; display: inline-block; border-radius: 3px; font-size: 12px;">' . $country_flag . ' Land: <strong>' . $billing_country . '</strong>' . ($hide_tax ? ' → Steuer wird ausgeblendet' : '') . '</p>';
+    }
 
     // Setze Rechnungsnummer
     if (!$order->get_meta('_invoice_number_display', true)) {
@@ -342,10 +439,18 @@ try {
         </tr>';
     }
 
-    if ($order->get_total_tax() > 0) {
+    // Zeige Steuer nur wenn NICHT EU ohne Steuer
+    if ($order->get_total_tax() > 0 && !$hide_tax) {
         $totals_html .= '<tr>
             <td style="text-align: right; padding: 5px 0;"><strong>' . __('Tax:', 'woocommerce-pdf-invoice') . '</strong></td>
             <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_total_tax(), array('currency' => $order->get_currency())) . '</td>
+        </tr>';
+    }
+
+    // Hinweis wenn Steuer ausgeblendet wird
+    if ($hide_tax && $order->get_total_tax() > 0) {
+        $totals_html .= '<tr>
+            <td colspan="2" style="text-align: right; padding: 5px 0; color: #666; font-size: 10px;"><em>EU-Regelung: Steuer gem. §19 UStG ausgeblendet</em></td>
         </tr>';
     }
 
@@ -449,13 +554,17 @@ echo '<p><strong>Speicherort:</strong> <code>' . $pdf_dir . '</code></p>';
 echo '</div>';
 
 // ZIP-Download für Bulk-Generierung
-if ($success_count > 1 && isset($_GET['year']) && isset($_GET['month_num'])) {
+if ($success_count > 1 && isset($_GET['year'])) {
     echo '<div style="background: #e7f3ff; border: 2px solid #0073aa; padding: 20px; margin: 20px 0; text-align: center;">';
     echo '<h3 style="margin-top: 0;">📦 Alle PDFs herunterladen</h3>';
 
     try {
         // Erstelle ZIP-Datei
-        $zip_filename = 'rechnungen-' . $year . '-' . str_pad($month_num, 2, '0', STR_PAD_LEFT) . '.zip';
+        if ($month_num) {
+            $zip_filename = 'rechnungen-' . $year . '-' . str_pad($month_num, 2, '0', STR_PAD_LEFT) . '.zip';
+        } else {
+            $zip_filename = 'rechnungen-' . $year . ($regenerate_eu ? '-EU' : '') . '.zip';
+        }
         $zip_filepath = $pdf_dir . '/' . $zip_filename;
 
         $zip = new ZipArchive();
