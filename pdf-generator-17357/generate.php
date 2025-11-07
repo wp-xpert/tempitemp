@@ -558,6 +558,28 @@ if ($success_count > 1 && isset($_GET['year'])) {
     echo '<div style="background: #e7f3ff; border: 2px solid #0073aa; padding: 20px; margin: 20px 0; text-align: center;">';
     echo '<h3 style="margin-top: 0;">📦 Alle PDFs herunterladen</h3>';
 
+    // DEBUG: Zeige Infos über generated_files Array
+    echo '<div style="background: #fff; padding: 15px; margin: 15px 0; border: 1px solid #ccc; text-align: left; font-size: 12px;">';
+    echo '<h4 style="margin: 0 0 10px 0;">🔍 DEBUG-INFO:</h4>';
+    echo '<p><strong>Erfolgreiche PDFs:</strong> ' . $success_count . '</p>';
+    echo '<p><strong>Einträge in generated_files Array:</strong> ' . count($generated_files) . '</p>';
+
+    if (count($generated_files) > 0) {
+        echo '<p><strong>Dateien im Array:</strong></p><ul style="text-align: left; margin: 5px 0;">';
+        foreach ($generated_files as $file) {
+            $exists = file_exists($file) ? '✓' : '❌';
+            $filesize = file_exists($file) ? ' (' . round(filesize($file) / 1024, 1) . ' KB)' : ' (NICHT GEFUNDEN)';
+            echo '<li>' . $exists . ' ' . htmlspecialchars(basename($file)) . $filesize . '</li>';
+        }
+        echo '</ul>';
+    } else {
+        echo '<p style="color: red;"><strong>⚠️ PROBLEM: generated_files Array ist LEER!</strong></p>';
+    }
+
+    echo '<p><strong>PDF Verzeichnis:</strong> ' . htmlspecialchars($pdf_dir) . '</p>';
+    echo '<p><strong>Verzeichnis beschreibbar:</strong> ' . (is_writable($pdf_dir) ? '✓ Ja' : '❌ Nein') . '</p>';
+    echo '</div>';
+
     try {
         // Erstelle ZIP-Datei
         if ($month_num) {
@@ -567,39 +589,68 @@ if ($success_count > 1 && isset($_GET['year'])) {
         }
         $zip_filepath = $pdf_dir . '/' . $zip_filename;
 
-        $zip = new ZipArchive();
-        if ($zip->open($zip_filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+        echo '<p style="font-size: 12px;"><strong>ZIP-Datei:</strong> ' . htmlspecialchars($zip_filename) . '</p>';
 
-            // Füge alle in dieser Session generierten PDFs zum ZIP hinzu
-            $added_count = 0;
-
-            foreach ($generated_files as $file) {
-                if (file_exists($file)) {
-                    $filename = basename($file);
-                    $zip->addFile($file, $filename);
-                    $added_count++;
-                }
-            }
-
-            $zip->close();
-
-            if ($added_count > 0) {
-                $zip_url = $pdf_url . '/' . $zip_filename;
-                $zip_size = round(filesize($zip_filepath) / 1024, 2);
-
-                echo '<p><strong>' . $added_count . ' PDFs im ZIP-Archiv</strong></p>';
-                echo '<p>Dateigröße: ' . $zip_size . ' KB</p>';
-                echo '<p style="margin-top: 20px;"><a href="' . esc_url($zip_url) . '" style="background: #0073aa; color: white; padding: 15px 40px; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">📥 ZIP herunterladen (' . $added_count . ' PDFs)</a></p>';
-            } else {
-                echo '<p style="color: orange;">⚠️ Keine aktuellen PDFs für ZIP gefunden.</p>';
-            }
-
+        if (count($generated_files) === 0) {
+            echo '<div style="background: #fff3cd; border: 2px solid #ffa500; padding: 15px; margin: 15px 0;">';
+            echo '<p style="color: #856404; margin: 0;"><strong>⚠️ FEHLER:</strong> Keine Dateien zum Archivieren vorhanden!</p>';
+            echo '<p style="color: #856404; margin: 10px 0 0 0;">Das generated_files Array ist leer. PDFs wurden möglicherweise nicht korrekt gespeichert.</p>';
+            echo '</div>';
         } else {
-            echo '<p style="color: red;">❌ ZIP konnte nicht erstellt werden.</p>';
+            $zip = new ZipArchive();
+            $zip_open_result = $zip->open($zip_filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+            echo '<p style="font-size: 12px;"><strong>ZIP open() Ergebnis:</strong> ' . ($zip_open_result === TRUE ? '✓ Erfolgreich' : '❌ Fehler-Code: ' . $zip_open_result) . '</p>';
+
+            if ($zip_open_result === TRUE) {
+
+                // Füge alle in dieser Session generierten PDFs zum ZIP hinzu
+                $added_count = 0;
+                $skipped_files = array();
+
+                foreach ($generated_files as $file) {
+                    if (file_exists($file)) {
+                        $filename = basename($file);
+                        $add_result = $zip->addFile($file, $filename);
+                        if ($add_result) {
+                            $added_count++;
+                        } else {
+                            $skipped_files[] = $filename . ' (addFile fehlgeschlagen)';
+                        }
+                    } else {
+                        $skipped_files[] = basename($file) . ' (Datei nicht gefunden)';
+                    }
+                }
+
+                $zip->close();
+
+                // DEBUG: Zeige Details
+                echo '<div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; margin: 10px 0; font-size: 12px;">';
+                echo '<p><strong>✓ ZIP erstellt:</strong> ' . $added_count . ' Dateien hinzugefügt</p>';
+                if (count($skipped_files) > 0) {
+                    echo '<p style="color: #856404;"><strong>Übersprungen:</strong> ' . implode(', ', $skipped_files) . '</p>';
+                }
+                echo '</div>';
+
+                if ($added_count > 0) {
+                    $zip_url = $pdf_url . '/' . $zip_filename;
+                    $zip_size = round(filesize($zip_filepath) / 1024, 2);
+
+                    echo '<p><strong>' . $added_count . ' PDFs im ZIP-Archiv</strong></p>';
+                    echo '<p>Dateigröße: ' . $zip_size . ' KB</p>';
+                    echo '<p style="margin-top: 20px;"><a href="' . esc_url($zip_url) . '" style="background: #0073aa; color: white; padding: 15px 40px; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">📥 ZIP herunterladen (' . $added_count . ' PDFs)</a></p>';
+                } else {
+                    echo '<p style="color: orange;">⚠️ Keine PDFs konnten zum ZIP hinzugefügt werden.</p>';
+                }
+
+            } else {
+                echo '<p style="color: red;">❌ ZIP konnte nicht erstellt werden. Fehler-Code: ' . $zip_open_result . '</p>';
+            }
         }
 
     } catch (Exception $e) {
         echo '<p style="color: red;">❌ Fehler beim Erstellen des ZIP: ' . htmlspecialchars($e->getMessage()) . '</p>';
+        echo '<pre style="background: #f5f5f5; padding: 10px; text-align: left; font-size: 11px;">' . htmlspecialchars($e->getTraceAsString()) . '</pre>';
     }
 
     echo '</div>';
