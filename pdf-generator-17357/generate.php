@@ -49,23 +49,31 @@ if (!isset($_GET['order_id']) && !isset($_GET['month'])) {
         </div>
 
         <div class="box">
-            <h2>Alle Rechnungen eines Monats (2025)</h2>
+            <h2>Alle Rechnungen eines Monats</h2>
             <form method="get">
+                <label>Jahr wählen:</label>
+                <select name="year" required style="margin-bottom: 15px;">
+                    <option value="">-- Jahr wählen --</option>
+                    <option value="2024">2024</option>
+                    <option value="2025" selected>2025</option>
+                    <option value="2026">2026</option>
+                </select>
+
                 <label>Monat wählen:</label>
-                <select name="month" required>
+                <select name="month_num" required>
                     <option value="">-- Monat wählen --</option>
-                    <option value="2025-01">Januar 2025</option>
-                    <option value="2025-02">Februar 2025</option>
-                    <option value="2025-03">März 2025</option>
-                    <option value="2025-04">April 2025</option>
-                    <option value="2025-05">Mai 2025</option>
-                    <option value="2025-06">Juni 2025</option>
-                    <option value="2025-07">Juli 2025</option>
-                    <option value="2025-08">August 2025</option>
-                    <option value="2025-09">September 2025</option>
-                    <option value="2025-10">Oktober 2025</option>
-                    <option value="2025-11">November 2025</option>
-                    <option value="2025-12">Dezember 2025</option>
+                    <option value="01">Januar</option>
+                    <option value="02">Februar</option>
+                    <option value="03">März</option>
+                    <option value="04">April</option>
+                    <option value="05">Mai</option>
+                    <option value="06">Juni</option>
+                    <option value="07">Juli</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">Oktober</option>
+                    <option value="11">November</option>
+                    <option value="12">Dezember</option>
                 </select>
                 <br><br>
                 <button type="submit" class="button">Alle PDFs des Monats generieren</button>
@@ -78,9 +86,9 @@ if (!isset($_GET['order_id']) && !isset($_GET['month'])) {
 }
 
 // Bulk-Generierung für einen Monat
-if (isset($_GET['month'])) {
-    $month = sanitize_text_field($_GET['month']);
-    list($year, $month_num) = explode('-', $month);
+if (isset($_GET['year']) && isset($_GET['month_num'])) {
+    $year = intval($_GET['year']);
+    $month_num = sanitize_text_field($_GET['month_num']);
 
     // Erstelle Start- und Enddatum
     $start_timestamp = strtotime($year . '-' . $month_num . '-01 00:00:00');
@@ -181,6 +189,7 @@ echo '<hr>';
 // Zähler
 $success_count = 0;
 $error_count = 0;
+$generated_files = array(); // Speichere alle generierten Dateinamen für ZIP
 
 // Loop durch alle Order IDs
 foreach ($order_ids as $current_order_id) {
@@ -393,6 +402,7 @@ try {
     if ($bytes_written !== false && file_exists($filepath)) {
         $filesize = round(filesize($filepath) / 1024, 2);
         $success_count++;
+        $generated_files[] = $filepath; // Für ZIP-Archiv
 
         echo '<p style="color: green; font-weight: bold;">✅ PDF erfolgreich generiert!</p>';
         echo '<p><strong>Datei:</strong> ' . htmlspecialchars($filename) . ' (' . $filesize . ' KB)</p>';
@@ -437,6 +447,54 @@ echo '<p style="color: green;"><strong>Erfolgreich:</strong> ' . $success_count 
 echo '<p style="color: red;"><strong>Fehler:</strong> ' . $error_count . '</p>';
 echo '<p><strong>Speicherort:</strong> <code>' . $pdf_dir . '</code></p>';
 echo '</div>';
+
+// ZIP-Download für Bulk-Generierung
+if ($success_count > 1 && isset($_GET['year']) && isset($_GET['month_num'])) {
+    echo '<div style="background: #e7f3ff; border: 2px solid #0073aa; padding: 20px; margin: 20px 0; text-align: center;">';
+    echo '<h3 style="margin-top: 0;">📦 Alle PDFs herunterladen</h3>';
+
+    try {
+        // Erstelle ZIP-Datei
+        $zip_filename = 'rechnungen-' . $year . '-' . str_pad($month_num, 2, '0', STR_PAD_LEFT) . '.zip';
+        $zip_filepath = $pdf_dir . '/' . $zip_filename;
+
+        $zip = new ZipArchive();
+        if ($zip->open($zip_filepath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+
+            // Füge alle in dieser Session generierten PDFs zum ZIP hinzu
+            $added_count = 0;
+
+            foreach ($generated_files as $file) {
+                if (file_exists($file)) {
+                    $filename = basename($file);
+                    $zip->addFile($file, $filename);
+                    $added_count++;
+                }
+            }
+
+            $zip->close();
+
+            if ($added_count > 0) {
+                $zip_url = $pdf_url . '/' . $zip_filename;
+                $zip_size = round(filesize($zip_filepath) / 1024, 2);
+
+                echo '<p><strong>' . $added_count . ' PDFs im ZIP-Archiv</strong></p>';
+                echo '<p>Dateigröße: ' . $zip_size . ' KB</p>';
+                echo '<p style="margin-top: 20px;"><a href="' . esc_url($zip_url) . '" style="background: #0073aa; color: white; padding: 15px 40px; text-decoration: none; display: inline-block; border-radius: 5px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">📥 ZIP herunterladen (' . $added_count . ' PDFs)</a></p>';
+            } else {
+                echo '<p style="color: orange;">⚠️ Keine aktuellen PDFs für ZIP gefunden.</p>';
+            }
+
+        } else {
+            echo '<p style="color: red;">❌ ZIP konnte nicht erstellt werden.</p>';
+        }
+
+    } catch (Exception $e) {
+        echo '<p style="color: red;">❌ Fehler beim Erstellen des ZIP: ' . htmlspecialchars($e->getMessage()) . '</p>';
+    }
+
+    echo '</div>';
+}
 
 echo '<p style="margin-top: 30px;"><a href="?" style="background: #666; color: white; padding: 12px 30px; text-decoration: none; display: inline-block; border-radius: 5px;">← Zurück zum Generator</a></p>';
 
