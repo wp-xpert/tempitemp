@@ -3,6 +3,7 @@
  * PDF Generator für Order #17357
  *
  * Minimalistisch - nutzt woocommerce-pdf-invoice Plugin
+ * Speichert PDFs im WordPress uploads Ordner
  * Aufruf: /wp-content/plugins/pdf-generator-17357/generate.php
  */
 
@@ -45,155 +46,184 @@ if (!$order->get_meta('_invoice_number_display', true)) {
 }
 
 $invoice_number = $order->get_meta('_invoice_number_display', true);
-echo '✓ Rechnungsnummer: <strong>' . ($invoice_number ?: 'N/A') . '</strong><br>';
+if (empty($invoice_number)) {
+    $invoice_number = $order->get_order_number();
+}
+echo '✓ Rechnungsnummer: <strong>' . $invoice_number . '</strong><br>';
+echo '<hr>';
+
+// Upload-Ordner erstellen
+$upload_dir = wp_upload_dir();
+$pdf_dir = $upload_dir['basedir'] . '/invoices';
+$pdf_url = $upload_dir['baseurl'] . '/invoices';
+
+if (!file_exists($pdf_dir)) {
+    wp_mkdir_p($pdf_dir);
+    // .htaccess für Sicherheit
+    file_put_contents($pdf_dir . '/.htaccess', 'Options -Indexes');
+}
+
+echo '✓ PDF-Ordner: ' . $pdf_dir . '<br>';
+echo '✓ Beschreibbar: ' . (is_writable($pdf_dir) ? '<strong style="color:green">Ja</strong>' : '<strong style="color:red">Nein</strong>') . '<br>';
 echo '<hr>';
 
 // PDF generieren
 try {
-    // Finde die originale WC_send_pdf Klasse im Backup oder im Original-Plugin
-    $original_send_pdf = null;
+    // Nutze Dompdf direkt
+    $dompdf_autoload = $wc_pdf_plugin . '/lib/dompdf/autoload.inc.php';
 
-    // Suche in allen möglichen Orten
-    $possible_locations = [
-        $wc_pdf_plugin . '/classes/class-pdf-send-pdf-class.php.backup',
-        $wc_pdf_plugin . '/classes/class-send-pdf.php',
-    ];
-
-    // Lies die originale Datei, falls vorhanden
-    foreach ($possible_locations as $loc) {
-        if (file_exists($loc)) {
-            $original_send_pdf = $loc;
-            break;
-        }
+    if (!file_exists($dompdf_autoload)) {
+        die('❌ Dompdf nicht gefunden: ' . $dompdf_autoload);
     }
 
-    // Fallback: Lade Template-basierte Generierung
-    if (!class_exists('WC_send_pdf')) {
-        // Nutze Dompdf direkt
-        $dompdf_autoload = $wc_pdf_plugin . '/lib/dompdf/autoload.inc.php';
+    require_once($dompdf_autoload);
+    echo '✓ Dompdf geladen<br>';
 
-        if (file_exists($dompdf_autoload)) {
-            require_once($dompdf_autoload);
-
-            echo '✓ Dompdf geladen<br>';
-
-            // Generiere HTML
-            $html = '<!DOCTYPE html>
+    // Generiere HTML
+    $html = '<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; font-size: 12pt; }
-        h1 { color: #333; border-bottom: 2px solid #0073aa; padding-bottom: 10px; }
+        body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11pt; color: #333; }
+        h1 { color: #0073aa; border-bottom: 3px solid #0073aa; padding-bottom: 10px; margin-bottom: 20px; }
+        h2 { color: #555; font-size: 14pt; margin-top: 20px; margin-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th { background: #f5f5f5; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; }
-        td { padding: 8px; border-bottom: 1px solid #eee; }
-        .total { font-weight: bold; font-size: 14pt; }
+        th { background: #0073aa; color: white; padding: 12px 8px; text-align: left; }
+        td { padding: 10px 8px; border-bottom: 1px solid #ddd; }
+        tbody tr:nth-child(even) { background: #f9f9f9; }
+        .grand-total { background: #0073aa; color: white; font-size: 14pt; }
     </style>
 </head>
 <body>
-    <h1>Rechnung ' . ($invoice_number ?: $order->get_order_number()) . '</h1>
+    <h1>RECHNUNG ' . htmlspecialchars($invoice_number) . '</h1>
 
-    <p><strong>Bestellnummer:</strong> ' . $order->get_order_number() . '<br>
-    <strong>Datum:</strong> ' . $order->get_date_created()->date('d.m.Y') . '</p>
+    <p><strong>Bestellnummer:</strong> ' . htmlspecialchars($order->get_order_number()) . '<br>
+    <strong>Datum:</strong> ' . $order->get_date_created()->date('d.m.Y H:i') . '<br>
+    <strong>Zahlungsmethode:</strong> ' . htmlspecialchars($order->get_payment_method_title()) . '</p>
 
-    <h2>Kunde</h2>
-    <p>' . nl2br($order->get_formatted_billing_address()) . '<br>
-    E-Mail: ' . $order->get_billing_email() . '</p>
+    <h2>Rechnungsadresse</h2>
+    <p>' . nl2br(htmlspecialchars($order->get_formatted_billing_address())) . '<br>
+    <strong>E-Mail:</strong> ' . htmlspecialchars($order->get_billing_email()) . '</p>';
 
-    <h2>Bestellte Artikel</h2>
+    if ($order->get_formatted_shipping_address()) {
+        $html .= '<h2>Lieferadresse</h2>
+        <p>' . nl2br(htmlspecialchars($order->get_formatted_shipping_address())) . '</p>';
+    }
+
+    $html .= '<h2>Bestellte Artikel</h2>
     <table>
         <thead>
             <tr>
-                <th>Produkt</th>
-                <th style="text-align:center">Menge</th>
-                <th style="text-align:right">Einzelpreis</th>
-                <th style="text-align:right">Gesamt</th>
+                <th style="width: 50%">Produkt</th>
+                <th style="width: 15%; text-align: center">Menge</th>
+                <th style="width: 17.5%; text-align: right">Einzelpreis</th>
+                <th style="width: 17.5%; text-align: right">Gesamt</th>
             </tr>
         </thead>
         <tbody>';
 
-            foreach ($order->get_items() as $item) {
-                $html .= '<tr>
-                    <td>' . $item->get_name() . '</td>
-                    <td style="text-align:center">' . $item->get_quantity() . '</td>
-                    <td style="text-align:right">' . wc_price($order->get_item_subtotal($item, false, false)) . '</td>
-                    <td style="text-align:right">' . wc_price($order->get_line_subtotal($item, false, false)) . '</td>
-                </tr>';
-            }
+    foreach ($order->get_items() as $item) {
+        $product_name = $item->get_name();
+        $quantity = $item->get_quantity();
+        $subtotal = $order->get_item_subtotal($item, false, false);
+        $total = $order->get_line_subtotal($item, false, false);
 
-            $html .= '</tbody>
+        $html .= '<tr>
+            <td>' . htmlspecialchars($product_name) . '</td>
+            <td style="text-align: center">' . $quantity . '</td>
+            <td style="text-align: right">' . number_format($subtotal, 2, ',', '.') . ' ' . $order->get_currency() . '</td>
+            <td style="text-align: right">' . number_format($total, 2, ',', '.') . ' ' . $order->get_currency() . '</td>
+        </tr>';
+    }
+
+    $html .= '</tbody>
         <tfoot>
             <tr>
-                <td colspan="3" style="text-align:right"><strong>Zwischensumme:</strong></td>
-                <td style="text-align:right">' . wc_price($order->get_subtotal()) . '</td>
+                <td colspan="3" style="text-align: right"><strong>Zwischensumme:</strong></td>
+                <td style="text-align: right">' . number_format($order->get_subtotal(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
             </tr>';
 
-            if ($order->get_shipping_total() > 0) {
-                $html .= '<tr>
-                    <td colspan="3" style="text-align:right"><strong>Versand:</strong></td>
-                    <td style="text-align:right">' . wc_price($order->get_shipping_total()) . '</td>
-                </tr>';
-            }
+    if ($order->get_shipping_total() > 0) {
+        $html .= '<tr>
+            <td colspan="3" style="text-align: right"><strong>Versand:</strong></td>
+            <td style="text-align: right">' . number_format($order->get_shipping_total(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
+        </tr>';
+    }
 
-            if ($order->get_total_tax() > 0) {
-                $html .= '<tr>
-                    <td colspan="3" style="text-align:right"><strong>MwSt.:</strong></td>
-                    <td style="text-align:right">' . wc_price($order->get_total_tax()) . '</td>
-                </tr>';
-            }
+    if ($order->get_total_tax() > 0) {
+        $html .= '<tr>
+            <td colspan="3" style="text-align: right"><strong>MwSt.:</strong></td>
+            <td style="text-align: right">' . number_format($order->get_total_tax(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
+        </tr>';
+    }
 
-            $html .= '<tr>
-                <td colspan="3" style="text-align:right" class="total">GESAMT:</td>
-                <td style="text-align:right" class="total">' . wc_price($order->get_total()) . '</td>
-            </tr>
+    $html .= '<tr class="grand-total">
+            <td colspan="3" style="text-align: right; padding: 15px 8px"><strong>GESAMT:</strong></td>
+            <td style="text-align: right; padding: 15px 8px"><strong>' . number_format($order->get_total(), 2, ',', '.') . ' ' . $order->get_currency() . '</strong></td>
+        </tr>
         </tfoot>
     </table>
 
-    <p style="margin-top:40px;"><small>Vielen Dank für Ihren Einkauf!</small></p>
+    <p style="margin-top: 40px; color: #666;"><em>Vielen Dank für Ihren Einkauf!</em></p>
 </body>
 </html>';
 
-            // PDF erstellen
-            $dompdf = new Dompdf\Dompdf();
-            $dompdf->loadHtml($html);
-            $dompdf->setPaper('A4', 'portrait');
-            $dompdf->render();
+    echo '✓ HTML generiert (' . strlen($html) . ' Zeichen)<br>';
 
-            // Dateiname
-            $filename = 'invoice-' . sanitize_file_name($invoice_number ?: $order_id) . '.pdf';
-            $filepath = __DIR__ . '/' . $filename;
+    // PDF erstellen
+    $dompdf = new Dompdf\Dompdf();
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
 
-            // Speichern
-            file_put_contents($filepath, $dompdf->output());
+    $pdf_output = $dompdf->output();
+    echo '✓ PDF gerendert (' . strlen($pdf_output) . ' Bytes)<br>';
 
-            if (file_exists($filepath)) {
-                $filesize = round(filesize($filepath) / 1024, 2);
-                echo '<p style="color:green;font-size:16pt;"><strong>✅ PDF erfolgreich generiert!</strong></p>';
-                echo '<p><strong>Datei:</strong> ' . $filename . '<br>';
-                echo '<strong>Größe:</strong> ' . $filesize . ' KB<br>';
-                echo '<strong>Pfad:</strong> ' . $filepath . '</p>';
+    // Dateiname
+    $filename = 'invoice-' . sanitize_file_name($invoice_number) . '.pdf';
+    $filepath = $pdf_dir . '/' . $filename;
 
-                // Download-Link
-                $download_url = plugins_url($filename, __FILE__);
-                echo '<p><a href="' . $download_url . '" target="_blank" style="background:#0073aa;color:white;padding:15px 30px;text-decoration:none;display:inline-block;margin-top:20px;border-radius:5px;font-size:14pt;">📄 PDF herunterladen</a></p>';
+    echo '✓ Ziel: ' . $filepath . '<br>';
 
-                // Direkter Download starten
-                echo '<script>window.open("' . $download_url . '", "_blank");</script>';
-            } else {
-                echo '<p style="color:red;">❌ Fehler beim Speichern der PDF!</p>';
-            }
+    // Speichern
+    $bytes_written = file_put_contents($filepath, $pdf_output);
 
-        } else {
-            echo '<p style="color:red;">❌ Dompdf nicht gefunden!</p>';
-            echo '<p>Pfad: ' . $dompdf_autoload . '</p>';
+    if ($bytes_written !== false && file_exists($filepath)) {
+        $filesize = round(filesize($filepath) / 1024, 2);
+        echo '<hr>';
+        echo '<p style="color: green; font-size: 20pt; font-weight: bold;">✅ PDF ERFOLGREICH GENERIERT!</p>';
+        echo '<table style="background: #f0f0f0; padding: 20px; border: 3px solid #0073aa; margin: 20px 0;">
+            <tr><td><strong>Dateiname:</strong></td><td>' . htmlspecialchars($filename) . '</td></tr>
+            <tr><td><strong>Größe:</strong></td><td>' . $filesize . ' KB</td></tr>
+            <tr><td><strong>Bytes:</strong></td><td>' . number_format($bytes_written) . '</td></tr>
+            <tr><td><strong>Speicherort:</strong></td><td><code>' . htmlspecialchars($filepath) . '</code></td></tr>
+        </table>';
+
+        // Download-Link
+        $download_url = $pdf_url . '/' . $filename;
+        echo '<p><a href="' . esc_url($download_url) . '" target="_blank" style="background: #0073aa; color: white; padding: 20px 40px; text-decoration: none; display: inline-block; margin-top: 20px; border-radius: 5px; font-size: 16pt; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📄 PDF JETZT HERUNTERLADEN</a></p>';
+
+        // Auto-Download nach 1 Sekunde
+        echo '<script>setTimeout(function(){ window.open("' . esc_url($download_url) . '", "_blank"); }, 1000);</script>';
+
+        echo '<p style="color: #666; margin-top: 20px;"><em>Die PDF wird automatisch in 1 Sekunde geöffnet...</em></p>';
+    } else {
+        echo '<p style="color: red; font-size: 16pt;">❌ Fehler beim Speichern!</p>';
+        echo '<p><strong>Bytes geschrieben:</strong> ' . var_export($bytes_written, true) . '</p>';
+        echo '<p><strong>Datei existiert:</strong> ' . (file_exists($filepath) ? 'Ja' : 'Nein') . '</p>';
+        echo '<p><strong>Ordner beschreibbar:</strong> ' . (is_writable($pdf_dir) ? 'Ja' : 'Nein') . '</p>';
+
+        $last_error = error_get_last();
+        if ($last_error) {
+            echo '<p><strong>PHP Error:</strong> ' . htmlspecialchars($last_error['message']) . '</p>';
         }
     }
 
 } catch (Exception $e) {
-    echo '<p style="color:red;">❌ Fehler: ' . $e->getMessage() . '</p>';
-    echo '<pre>' . $e->getTraceAsString() . '</pre>';
+    echo '<p style="color: red; font-size: 16pt;">❌ Exception: ' . htmlspecialchars($e->getMessage()) . '</p>';
+    echo '<pre style="background: #f5f5f5; padding: 10px; border-left: 3px solid red;">' . htmlspecialchars($e->getTraceAsString()) . '</pre>';
 }
 
 echo '<hr>';
-echo '<p><small>Generiert am: ' . date('d.m.Y H:i:s') . '</small></p>';
+echo '<p><small>Generiert am: ' . date('d.m.Y H:i:s') . ' | Order ID: ' . $order_id . '</small></p>';
