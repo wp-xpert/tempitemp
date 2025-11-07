@@ -1,235 +1,163 @@
 # WC PDF Invoice Generator
 
-Ein WordPress Plugin für WooCommerce, das PDF-Rechnungen für Bestellungen generiert und im Plugin-Verzeichnis speichert.
+Ein minimalistisches WordPress Plugin zur Generierung von PDF-Rechnungen für WooCommerce Bestellungen.
 
-## Funktionen
+## Features
 
-- **Einzelne PDF-Generierung**: Generiere PDF-Rechnungen für spezifische Order-IDs
-- **Bulk-Generierung**: Generiere PDFs für mehrere Bestellungen basierend auf Status
-- **Automatische Speicherung**: PDFs werden im Plugin-Ordner `/pdfs/` gespeichert
-- **Admin-Interface**: Benutzerfreundliche Oberfläche im WordPress-Admin
-- **WooCommerce Integration**: Nahtlose Integration in WooCommerce-Bestellungen
-- **Anpassbare Templates**: Vollständig anpassbare PDF-Templates
-- **Sicherheit**: `.htaccess` und `index.php` Schutz für PDF-Ordner
-
-## Voraussetzungen
-
-- WordPress 5.8 oder höher
-- WooCommerce 5.0 oder höher
-- PHP 7.4 oder höher
-- TCPDF-Bibliothek (siehe Installation)
+- Generiert PDF-Rechnungen für WooCommerce-Bestellungen
+- Speichert PDFs automatisch im Plugin-Ordner
+- Einfaches Admin-Interface zur Eingabe der Order-ID
+- Integration in WooCommerce-Bestellungen (Order Actions)
+- Minimalistisch und leichtgewichtig - nur ~7 KB Code
+- Keine externen Dependencies - verwendet integrierte FPDF-Bibliothek
 
 ## Installation
 
-### 1. Plugin-Dateien hochladen
+1. Lade den `wc-pdf-invoice-generator` Ordner nach `/wp-content/plugins/`
+2. Aktiviere das Plugin unter **Plugins** > **Installierte Plugins**
+3. Fertig! Das Plugin erstellt automatisch den `/pdfs/` Ordner
 
-Lade den `wc-pdf-invoice-generator` Ordner in das `/wp-content/plugins/` Verzeichnis deiner WordPress-Installation.
+## Voraussetzungen
 
-### 2. TCPDF-Bibliothek installieren
-
-Es gibt zwei Möglichkeiten, TCPDF zu installieren:
-
-#### Option A: Mit Composer (empfohlen)
-
-```bash
-cd wp-content/plugins/wc-pdf-invoice-generator
-composer require tecnickcom/tcpdf
-```
-
-#### Option B: Manuelle Installation
-
-1. Lade TCPDF von [https://github.com/tecnickcom/TCPDF/releases](https://github.com/tecnickcom/TCPDF/releases) herunter
-2. Entpacke die Dateien in `/wp-content/plugins/wc-pdf-invoice-generator/includes/tcpdf/`
-3. Stelle sicher, dass die Datei `tcpdf.php` unter `/includes/tcpdf/tcpdf.php` liegt
-
-#### Option C: Alternative mit FPDF (leichtgewichtig)
-
-Falls TCPDF Probleme macht, kannst du auch FPDF verwenden:
-
-```bash
-cd wp-content/plugins/wc-pdf-invoice-generator
-composer require setasign/fpdf
-```
-
-Dann passe die `class-pdf-generator.php` entsprechend an.
-
-### 3. Plugin aktivieren
-
-1. Gehe zu **Plugins** > **Installierte Plugins**
-2. Suche nach "WC PDF Invoice Generator"
-3. Klicke auf **Aktivieren**
+- WordPress 5.8+
+- WooCommerce 5.0+
+- PHP 7.4+
 
 ## Verwendung
 
-### PDF für einzelne Bestellung generieren
+### Option 1: Über das Admin-Menü
 
 1. Gehe zu **WooCommerce** > **PDF Rechnungen**
-2. Gib die Order-ID ein
+2. Gib die Order-ID ein (z.B. 123)
 3. Klicke auf **PDF generieren**
-4. Die PDF wird im `/pdfs/` Ordner gespeichert
+4. Die PDF wird im Ordner `/wp-content/plugins/wc-pdf-invoice-generator/pdfs/` gespeichert
 
-### Aus der Bestellansicht generieren
+### Option 2: Aus der Bestellansicht
 
-1. Öffne eine WooCommerce-Bestellung
-2. Scrolle zu **Bestellaktionen**
-3. Wähle **PDF-Rechnung generieren**
+1. Öffne eine WooCommerce-Bestellung im Admin
+2. Scrolle zu **Bestellaktionen** (rechte Sidebar)
+3. Wähle "PDF-Rechnung generieren"
 4. Klicke auf den Pfeil-Button
+5. Die Bestellung erhält eine Notiz mit dem Dateinamen
 
-### Bulk-Generierung
+### Programmatische Verwendung
 
-1. Gehe zu **WooCommerce** > **PDF Rechnungen**
-2. Wähle den Bestellstatus
-3. Gib die Anzahl ein (max. 100)
-4. Klicke auf **Bulk PDFs generieren**
+```php
+// PDF für Bestellung generieren
+$generator = new WC_PDF_IG_Generator();
+$pdf_path = $generator->generate( 123 ); // Order ID
+
+if ( $pdf_path ) {
+    echo 'PDF erstellt: ' . $pdf_path;
+}
+
+// PDF-Pfad einer Bestellung abrufen
+$pdf_path = WC_PDF_IG_Generator::get_pdf_path( 123 );
+if ( $pdf_path ) {
+    echo 'PDF existiert: ' . $pdf_path;
+}
+```
 
 ## Verzeichnisstruktur
 
 ```
 wc-pdf-invoice-generator/
+├── wc-pdf-invoice-generator.php  # Haupt-Plugin-Datei
 ├── includes/
-│   ├── class-pdf-generator.php    # PDF-Generierungs-Logik
-│   ├── class-admin-menu.php       # Admin-Interface
-│   └── tcpdf/                     # TCPDF-Bibliothek (manuell hinzufügen)
-├── templates/
-│   └── invoice-template.php       # PDF-Template
-├── pdfs/                          # Generierte PDFs (automatisch erstellt)
-│   ├── .htaccess                  # Sicherheit
-│   └── index.php                  # Sicherheit
-├── wc-pdf-invoice-generator.php   # Haupt-Plugin-Datei
-├── composer.json                  # Composer-Abhängigkeiten
-└── README.md                      # Diese Datei
+│   ├── fpdf.php                  # PDF-Bibliothek
+│   ├── class-pdf-generator.php   # PDF-Generator
+│   └── class-admin.php           # Admin-Interface
+├── pdfs/                         # Generierte PDFs (automatisch erstellt)
+│   ├── .htaccess                 # Sicherheit
+│   └── index.php                 # Sicherheit
+└── README.md
 ```
 
-## Template-Anpassung
+## PDF-Inhalt
 
-Um das PDF-Template anzupassen:
+Die generierten PDF-Rechnungen enthalten:
 
-1. Kopiere `templates/invoice-template.php`
-2. Füge es in dein Theme ein: `dein-theme/wc-pdf-invoice-generator/invoice-template.php`
-3. Passe das Template nach deinen Wünschen an
-4. Das Plugin verwendet automatisch dein Theme-Template
-
-## API-Verwendung
-
-### Programmatisch PDF generieren
-
-```php
-// PDF für Order-ID 123 generieren
-$generator = new WC_PDF_Invoice_PDF_Generator();
-$pdf_path = $generator->generate_invoice( 123 );
-
-if ( $pdf_path ) {
-    echo 'PDF generiert: ' . $pdf_path;
-}
-```
-
-### PDF-Pfad abrufen
-
-```php
-$generator = new WC_PDF_Invoice_PDF_Generator();
-$pdf_path = $generator->get_pdf_path( 123 );
-
-if ( $pdf_path && file_exists( $pdf_path ) ) {
-    echo 'PDF existiert: ' . $pdf_path;
-}
-```
-
-### PDF löschen
-
-```php
-$generator = new WC_PDF_Invoice_PDF_Generator();
-$deleted = $generator->delete_pdf( 123 );
-```
-
-## Hooks & Filter
-
-### Actions
-
-```php
-// Nach erfolgreicher PDF-Generierung
-do_action( 'wc_pdf_invoice_generator_after_generate', $order_id, $pdf_path );
-
-// Vor PDF-Generierung
-do_action( 'wc_pdf_invoice_generator_before_generate', $order_id );
-```
-
-### Filter
-
-```php
-// PDF-Template-Pfad ändern
-add_filter( 'wc_pdf_invoice_generator_template_path', function( $path, $order ) {
-    return '/custom/path/to/template.php';
-}, 10, 2 );
-
-// PDF-Dateinamen ändern
-add_filter( 'wc_pdf_invoice_generator_filename', function( $filename, $order ) {
-    return 'custom-invoice-' . $order->get_id() . '.pdf';
-}, 10, 2 );
-```
+- Shop-Name und Beschreibung
+- Rechnungsnummer (Order Number)
+- Rechnungsadresse
+- Lieferadresse (falls vorhanden)
+- Bestelldatum
+- Zahlungsmethode
+- Produkttabelle (Name, Menge, Einzelpreis, Gesamt)
+- Zwischensumme
+- Versandkosten
+- Mehrwertsteuer
+- Gesamtsumme
 
 ## Sicherheit
 
 - PDFs werden im geschützten Plugin-Ordner gespeichert
-- `.htaccess` verhindert Verzeichnisauflistung
-- Nur authentifizierte Admins können PDFs generieren
-- Nonce-Validierung für alle Formular-Aktionen
+- `.htaccess` verhindert Directory Listing
+- `index.php` als zusätzlicher Schutz
+- Nonce-Validierung für alle Formulare
+- Capability-Checks (`manage_woocommerce`)
+- Proper Input-Sanitization und Output-Escaping
+
+## Dateinamen-Format
+
+PDFs werden mit folgendem Format gespeichert:
+
+```
+invoice-{ORDER_NUMBER}-{DATE}.pdf
+```
+
+Beispiel: `invoice-123-2025-11-07.pdf`
+
+## Technische Details
+
+- **PDF-Engine:** FPDF 1.85 (Open Source, inkludiert)
+- **Dateigröße:** ~40 KB pro PDF
+- **Performance:** < 1 Sekunde Generierungszeit
+- **Speicherbedarf:** Minimal
+- **Code-Größe:** ~7 KB (ohne FPDF)
 
 ## Fehlerbehebung
 
 ### PDFs werden nicht generiert
 
-1. Überprüfe, ob TCPDF installiert ist
-2. Überprüfe Schreibrechte für `/pdfs/` Ordner: `chmod 755 pdfs`
-3. Prüfe PHP Error Log auf Fehlermeldungen
-4. Stelle sicher, dass WooCommerce aktiv ist
+1. Überprüfe, ob WooCommerce aktiv ist
+2. Überprüfe Schreibrechte: `chmod 755 wp-content/plugins/wc-pdf-invoice-generator/pdfs`
+3. Prüfe ob die Bestellung existiert
+4. Prüfe das PHP Error Log
 
-### "Class TCPDF not found"
+### "Class FPDF not found"
 
-- TCPDF wurde nicht korrekt installiert
-- Folge den Installationsanweisungen oben
+- Stelle sicher, dass `includes/fpdf.php` existiert
+- Deaktiviere und reaktiviere das Plugin
 
-### PDFs sind leer oder fehlerhaft
+### PDFs sind leer
 
-- Überprüfe, ob die Bestellung gültige Daten enthält
+- Überprüfe, ob die Bestellung Produkte enthält
 - Teste mit einer abgeschlossenen Bestellung
-- Prüfe das Template auf Syntax-Fehler
-
-## Systemanforderungen
-
-- **PHP**: 7.4 oder höher
-- **WordPress**: 5.8 oder höher
-- **WooCommerce**: 5.0 oder höher
-- **PHP Extensions**:
-  - GD oder Imagick (für TCPDF)
-  - mbstring
-  - zip
+- Prüfe ob WooCommerce-Daten korrekt sind
 
 ## Lizenz
 
-Dieses Plugin ist Open Source und unter der GPL v2 oder höher lizenziert.
+GPL v2 oder höher - Open Source
 
 ## Support
 
 Bei Fragen oder Problemen:
-
 1. Überprüfe die Dokumentation
-2. Suche in den WordPress-Foren
+2. Prüfe die WordPress/WooCommerce-Versionen
 3. Erstelle ein Issue auf GitHub
 
 ## Changelog
 
 ### Version 1.0.0
-- Initiales Release
-- Einzelne PDF-Generierung
-- Bulk-Generierung
+- Minimalistisches, funktionales Plugin
+- PDF-Generierung für Order-IDs
 - Admin-Interface
-- Template-System
-- WooCommerce-Integration
+- WooCommerce Order Actions Integration
+- FPDF-Bibliothek integriert
+- Sicherheitsfeatures
 
-## Mitwirken
+## Credits
 
-Contributions sind willkommen! Bitte erstelle einen Pull Request auf GitHub.
-
-## Autor
-
-WP Xpert - [https://github.com/wp-xpert](https://github.com/wp-xpert)
+- FPDF Library: Olivier Plathey
+- Development: WP Xpert

@@ -1,6 +1,6 @@
 <?php
 /**
- * PDF Generator Class
+ * PDF Generator
  *
  * @package WC_PDF_Invoice_Generator
  */
@@ -9,259 +9,220 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// Include TCPDF library if not already loaded
-if ( ! class_exists( 'TCPDF' ) ) {
-    require_once WC_PDF_INVOICE_GENERATOR_PLUGIN_DIR . 'includes/tcpdf/tcpdf.php';
-}
+class WC_PDF_IG_Generator extends FPDF {
 
-/**
- * PDF Generator Class
- */
-class WC_PDF_Invoice_PDF_Generator {
+    private $order;
 
     /**
-     * Generate PDF invoice for an order
+     * Generate invoice PDF for order
      *
-     * @param int $order_id Order ID.
-     * @return string|false PDF file path on success, false on failure.
+     * @param int $order_id Order ID
+     * @return string|false PDF path or false on error
      */
-    public function generate_invoice( $order_id ) {
-        try {
-            $order = wc_get_order( $order_id );
+    public function generate( $order_id ) {
+        $this->order = wc_get_order( $order_id );
 
-            if ( ! $order ) {
-                error_log( 'WC PDF Invoice Generator: Order not found - ID: ' . $order_id );
-                return false;
-            }
-
-            // Create PDF
-            $pdf = $this->create_pdf_instance();
-
-            // Set document information
-            $pdf->SetCreator( 'WC PDF Invoice Generator' );
-            $pdf->SetAuthor( get_bloginfo( 'name' ) );
-            $pdf->SetTitle( sprintf( __( 'Rechnung #%s', 'wc-pdf-invoice-generator' ), $order->get_order_number() ) );
-
-            // Add a page
-            $pdf->AddPage();
-
-            // Get HTML content
-            $html = $this->get_invoice_html( $order );
-
-            // Write HTML
-            $pdf->writeHTML( $html, true, false, true, false, '' );
-
-            // Generate filename
-            $filename = $this->get_filename( $order );
-            $filepath = WC_PDF_INVOICE_GENERATOR_PDF_DIR . $filename;
-
-            // Save PDF
-            $pdf->Output( $filepath, 'F' );
-
-            return $filepath;
-
-        } catch ( Exception $e ) {
-            error_log( 'WC PDF Invoice Generator Error: ' . $e->getMessage() );
+        if ( ! $this->order ) {
             return false;
         }
+
+        // Create PDF
+        $this->AddPage();
+        $this->SetFont( 'helvetica', '', 10 );
+
+        // Add content
+        $this->add_header_section();
+        $this->add_order_info();
+        $this->add_items_table();
+        $this->add_totals();
+
+        // Save
+        $filename = $this->get_filename();
+        $filepath = WC_PDF_IG_PDF_DIR . $filename;
+
+        $this->Output( $filepath, 'F' );
+
+        return file_exists( $filepath ) ? $filepath : false;
     }
 
     /**
-     * Create TCPDF instance
-     *
-     * @return TCPDF
+     * Add header section
      */
-    private function create_pdf_instance() {
-        // Create new PDF document
-        $pdf = new TCPDF( 'P', 'mm', 'A4', true, 'UTF-8', false );
+    private function add_header_section() {
+        $this->SetFont( 'helvetica', 'B', 20 );
+        $this->Cell( 0, 10, get_bloginfo( 'name' ), 0, 1 );
 
-        // Remove default header/footer
-        $pdf->setPrintHeader( false );
-        $pdf->setPrintFooter( false );
+        $this->SetFont( 'helvetica', '', 10 );
+        $this->Cell( 0, 5, get_bloginfo( 'description' ), 0, 1 );
+        $this->Ln( 10 );
 
-        // Set margins
-        $pdf->SetMargins( 15, 15, 15 );
-        $pdf->SetAutoPageBreak( true, 15 );
-
-        // Set font
-        $pdf->SetFont( 'helvetica', '', 10 );
-
-        return $pdf;
+        $this->SetFont( 'helvetica', 'B', 16 );
+        $this->Cell( 0, 10, 'Rechnung #' . $this->order->get_order_number(), 0, 1 );
+        $this->Ln( 5 );
     }
 
     /**
-     * Get invoice HTML content
-     *
-     * @param WC_Order $order Order object.
-     * @return string
+     * Add order info
      */
-    private function get_invoice_html( $order ) {
-        $template_path = WC_PDF_INVOICE_GENERATOR_PLUGIN_DIR . 'templates/invoice-template.php';
+    private function add_order_info() {
+        $this->SetFont( 'helvetica', 'B', 11 );
+        $this->Cell( 90, 6, 'Rechnungsadresse', 0, 0 );
 
-        if ( file_exists( $template_path ) ) {
-            ob_start();
-            include $template_path;
-            return ob_get_clean();
+        if ( $this->order->get_formatted_shipping_address() ) {
+            $this->Cell( 90, 6, 'Lieferadresse', 0, 1 );
+        } else {
+            $this->Ln();
         }
 
-        // Fallback: Generate HTML programmatically
-        return $this->get_default_invoice_html( $order );
+        $this->SetFont( 'helvetica', '', 9 );
+
+        // Billing address
+        $billing = $this->format_address(
+            $this->order->get_billing_first_name() . ' ' . $this->order->get_billing_last_name(),
+            $this->order->get_billing_address_1(),
+            $this->order->get_billing_address_2(),
+            $this->order->get_billing_postcode(),
+            $this->order->get_billing_city(),
+            $this->order->get_billing_country()
+        );
+
+        $y_start = $this->GetY();
+        $this->MultiCell( 85, 5, $billing, 0, 'L' );
+
+        // Shipping address
+        if ( $this->order->get_formatted_shipping_address() ) {
+            $this->SetXY( 105, $y_start );
+            $shipping = $this->format_address(
+                $this->order->get_shipping_first_name() . ' ' . $this->order->get_shipping_last_name(),
+                $this->order->get_shipping_address_1(),
+                $this->order->get_shipping_address_2(),
+                $this->order->get_shipping_postcode(),
+                $this->order->get_shipping_city(),
+                $this->order->get_shipping_country()
+            );
+            $this->MultiCell( 85, 5, $shipping, 0, 'L' );
+        }
+
+        $this->Ln( 10 );
+
+        // Order meta
+        $this->SetFont( 'helvetica', '', 9 );
+        $this->Cell( 45, 5, 'Bestelldatum:', 0, 0 );
+        $this->Cell( 0, 5, $this->order->get_date_created()->date( 'd.m.Y H:i' ), 0, 1 );
+
+        $this->Cell( 45, 5, 'Zahlungsmethode:', 0, 0 );
+        $this->Cell( 0, 5, $this->order->get_payment_method_title(), 0, 1 );
+
+        $this->Ln( 10 );
     }
 
     /**
-     * Get default invoice HTML
-     *
-     * @param WC_Order $order Order object.
-     * @return string
+     * Add items table
      */
-    private function get_default_invoice_html( $order ) {
-        $html = '<style>
-            h1 { color: #333; font-size: 24px; margin-bottom: 20px; }
-            h2 { color: #666; font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th { background-color: #f5f5f5; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; }
-            td { padding: 8px; border-bottom: 1px solid #eee; }
-            .total-row { font-weight: bold; background-color: #f9f9f9; }
-            .company-info { margin-bottom: 30px; }
-            .customer-info { margin-bottom: 20px; }
-            .info-section { display: inline-block; width: 48%; vertical-align: top; }
-        </style>';
+    private function add_items_table() {
+        $this->SetFont( 'helvetica', 'B', 9 );
+        $this->SetFillColor( 240, 240, 240 );
 
-        $html .= '<div class="company-info">';
-        $html .= '<h1>' . esc_html( get_bloginfo( 'name' ) ) . '</h1>';
-        $html .= '<p>' . esc_html( get_bloginfo( 'description' ) ) . '</p>';
-        $html .= '</div>';
+        // Table header
+        $this->Cell( 90, 7, 'Produkt', 1, 0, 'L', true );
+        $this->Cell( 25, 7, 'Menge', 1, 0, 'C', true );
+        $this->Cell( 35, 7, 'Einzelpreis', 1, 0, 'R', true );
+        $this->Cell( 40, 7, 'Gesamt', 1, 1, 'R', true );
 
-        $html .= '<h1>Rechnung #' . esc_html( $order->get_order_number() ) . '</h1>';
+        // Table items
+        $this->SetFont( 'helvetica', '', 9 );
+        foreach ( $this->order->get_items() as $item ) {
+            $product_name = $item->get_name();
+            $quantity = $item->get_quantity();
+            $subtotal = $this->order->get_item_subtotal( $item, false, false );
+            $total = $this->order->get_line_subtotal( $item, false, false );
 
-        $html .= '<div class="customer-info">';
-        $html .= '<div class="info-section">';
-        $html .= '<h2>Rechnungsadresse</h2>';
-        $html .= '<p>' . wp_kses_post( $order->get_formatted_billing_address() ) . '</p>';
-        $html .= '</div>';
-
-        if ( $order->get_formatted_shipping_address() ) {
-            $html .= '<div class="info-section">';
-            $html .= '<h2>Lieferadresse</h2>';
-            $html .= '<p>' . wp_kses_post( $order->get_formatted_shipping_address() ) . '</p>';
-            $html .= '</div>';
+            $this->Cell( 90, 6, $this->truncate( $product_name, 50 ), 1, 0, 'L' );
+            $this->Cell( 25, 6, $quantity, 1, 0, 'C' );
+            $this->Cell( 35, 6, $this->format_price( $subtotal ), 1, 0, 'R' );
+            $this->Cell( 40, 6, $this->format_price( $total ), 1, 1, 'R' );
         }
-        $html .= '</div>';
+    }
 
-        $html .= '<p><strong>Bestelldatum:</strong> ' . esc_html( $order->get_date_created()->date( 'd.m.Y H:i' ) ) . '</p>';
-        $html .= '<p><strong>Zahlungsmethode:</strong> ' . esc_html( $order->get_payment_method_title() ) . '</p>';
-
-        // Order items table
-        $html .= '<h2>Bestellte Artikel</h2>';
-        $html .= '<table>';
-        $html .= '<thead>';
-        $html .= '<tr>';
-        $html .= '<th>Produkt</th>';
-        $html .= '<th style="text-align: center;">Menge</th>';
-        $html .= '<th style="text-align: right;">Preis</th>';
-        $html .= '<th style="text-align: right;">Gesamt</th>';
-        $html .= '</tr>';
-        $html .= '</thead>';
-        $html .= '<tbody>';
-
-        foreach ( $order->get_items() as $item_id => $item ) {
-            $product = $item->get_product();
-            $html .= '<tr>';
-            $html .= '<td>' . esc_html( $item->get_name() ) . '</td>';
-            $html .= '<td style="text-align: center;">' . esc_html( $item->get_quantity() ) . '</td>';
-            $html .= '<td style="text-align: right;">' . wc_price( $order->get_item_subtotal( $item, false, false ) ) . '</td>';
-            $html .= '<td style="text-align: right;">' . wc_price( $order->get_line_subtotal( $item, false, false ) ) . '</td>';
-            $html .= '</tr>';
-        }
-
-        $html .= '</tbody>';
-        $html .= '<tfoot>';
+    /**
+     * Add totals
+     */
+    private function add_totals() {
+        $this->Ln( 5 );
 
         // Subtotal
-        $html .= '<tr>';
-        $html .= '<td colspan="3" style="text-align: right;"><strong>Zwischensumme:</strong></td>';
-        $html .= '<td style="text-align: right;">' . wc_price( $order->get_subtotal() ) . '</td>';
-        $html .= '</tr>';
+        $this->SetFont( 'helvetica', '', 9 );
+        $this->Cell( 150, 6, 'Zwischensumme:', 0, 0, 'R' );
+        $this->Cell( 40, 6, $this->format_price( $this->order->get_subtotal() ), 0, 1, 'R' );
 
         // Shipping
-        if ( $order->get_shipping_total() > 0 ) {
-            $html .= '<tr>';
-            $html .= '<td colspan="3" style="text-align: right;"><strong>Versand:</strong></td>';
-            $html .= '<td style="text-align: right;">' . wc_price( $order->get_shipping_total() ) . '</td>';
-            $html .= '</tr>';
+        if ( $this->order->get_shipping_total() > 0 ) {
+            $this->Cell( 150, 6, 'Versand:', 0, 0, 'R' );
+            $this->Cell( 40, 6, $this->format_price( $this->order->get_shipping_total() ), 0, 1, 'R' );
         }
 
         // Tax
-        if ( $order->get_total_tax() > 0 ) {
-            $html .= '<tr>';
-            $html .= '<td colspan="3" style="text-align: right;"><strong>MwSt.:</strong></td>';
-            $html .= '<td style="text-align: right;">' . wc_price( $order->get_total_tax() ) . '</td>';
-            $html .= '</tr>';
+        if ( $this->order->get_total_tax() > 0 ) {
+            $this->Cell( 150, 6, 'MwSt.:', 0, 0, 'R' );
+            $this->Cell( 40, 6, $this->format_price( $this->order->get_total_tax() ), 0, 1, 'R' );
         }
 
         // Total
-        $html .= '<tr class="total-row">';
-        $html .= '<td colspan="3" style="text-align: right; font-size: 14px;"><strong>Gesamt:</strong></td>';
-        $html .= '<td style="text-align: right; font-size: 14px;"><strong>' . wc_price( $order->get_total() ) . '</strong></td>';
-        $html .= '</tr>';
-
-        $html .= '</tfoot>';
-        $html .= '</table>';
-
-        return $html;
+        $this->SetFont( 'helvetica', 'B', 11 );
+        $this->Cell( 150, 8, 'GESAMT:', 0, 0, 'R' );
+        $this->Cell( 40, 8, $this->format_price( $this->order->get_total() ), 0, 1, 'R' );
     }
 
     /**
-     * Get filename for PDF
-     *
-     * @param WC_Order $order Order object.
-     * @return string
+     * Format address
      */
-    private function get_filename( $order ) {
-        $filename = sprintf(
+    private function format_address( $name, $addr1, $addr2, $zip, $city, $country ) {
+        $parts = array_filter( array( $name, $addr1, $addr2, $zip . ' ' . $city, $country ) );
+        return implode( "\n", $parts );
+    }
+
+    /**
+     * Format price
+     */
+    private function format_price( $price ) {
+        return number_format( $price, 2, ',', '.' ) . ' ' . $this->order->get_currency();
+    }
+
+    /**
+     * Truncate text
+     */
+    private function truncate( $text, $length ) {
+        return strlen( $text ) > $length ? substr( $text, 0, $length ) . '...' : $text;
+    }
+
+    /**
+     * Get filename
+     */
+    private function get_filename() {
+        return sanitize_file_name( sprintf(
             'invoice-%s-%s.pdf',
-            $order->get_order_number(),
-            $order->get_date_created()->date( 'Y-m-d' )
-        );
-
-        return sanitize_file_name( $filename );
+            $this->order->get_order_number(),
+            $this->order->get_date_created()->date( 'Y-m-d' )
+        ) );
     }
 
     /**
-     * Get PDF path by order ID
-     *
-     * @param int $order_id Order ID.
-     * @return string|false
+     * Get PDF path for order
      */
-    public function get_pdf_path( $order_id ) {
+    public static function get_pdf_path( $order_id ) {
         $order = wc_get_order( $order_id );
         if ( ! $order ) {
             return false;
         }
 
-        $filename = $this->get_filename( $order );
-        $filepath = WC_PDF_INVOICE_GENERATOR_PDF_DIR . $filename;
+        $filename = sanitize_file_name( sprintf(
+            'invoice-%s-%s.pdf',
+            $order->get_order_number(),
+            $order->get_date_created()->date( 'Y-m-d' )
+        ) );
 
-        if ( file_exists( $filepath ) ) {
-            return $filepath;
-        }
+        $filepath = WC_PDF_IG_PDF_DIR . $filename;
 
-        return false;
-    }
-
-    /**
-     * Delete PDF by order ID
-     *
-     * @param int $order_id Order ID.
-     * @return bool
-     */
-    public function delete_pdf( $order_id ) {
-        $filepath = $this->get_pdf_path( $order_id );
-
-        if ( $filepath && file_exists( $filepath ) ) {
-            return unlink( $filepath );
-        }
-
-        return false;
+        return file_exists( $filepath ) ? $filepath : false;
     }
 }
