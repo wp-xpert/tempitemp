@@ -1,0 +1,29 @@
+# Composer
+/vendor/
+composer.lock
+
+# PDFs
+/pdfs/*.pdf
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WordPress
+wp-config.php
+.htaccess
+
+# Logs
+*.log
+error_log
+
+# Temp
+*.tmp
+*.bak
+*~
