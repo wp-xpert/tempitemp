@@ -94,13 +94,13 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
             <h2>🇪🇺 Alle EU-Rechnungen neu generieren (ohne Steuer)</h2>
             <p style="font-size: 14px; color: #666;">
                 <strong>Wichtig:</strong> Für EU-Länder (außer Österreich) darf keine Steuer ausgewiesen werden.<br>
-                Diese Option generiert ALLE Rechnungen von EU-Kunden ohne Steuerangabe neu.
+                Diese Option generiert ALLE Rechnungen von EU-Kunden des gewählten Jahres ohne Steuerangabe neu.
             </p>
             <form method="get">
                 <input type="hidden" name="regenerate_eu" value="1">
                 <input type="hidden" name="no_tax_eu" value="1">
 
-                <label>Zeitraum wählen:</label>
+                <label>Jahr wählen:</label>
                 <select name="year" required style="margin-bottom: 15px;">
                     <option value="">-- Jahr wählen --</option>
                     <option value="2024">2024</option>
@@ -108,28 +108,12 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
                     <option value="2026">2026</option>
                 </select>
 
-                <label>Monat (optional - leer lassen für ganzes Jahr):</label>
-                <select name="month_num">
-                    <option value="">-- Ganzes Jahr --</option>
-                    <option value="01">Januar</option>
-                    <option value="02">Februar</option>
-                    <option value="03">März</option>
-                    <option value="04">April</option>
-                    <option value="05">Mai</option>
-                    <option value="06">Juni</option>
-                    <option value="07">Juli</option>
-                    <option value="08">August</option>
-                    <option value="09">September</option>
-                    <option value="10">Oktober</option>
-                    <option value="11">November</option>
-                    <option value="12">Dezember</option>
-                </select>
-
                 <br><br>
-                <button type="submit" class="button" style="background: #ffa500;">🇪🇺 Nur EU-Rechnungen ohne Steuer generieren</button>
+                <button type="submit" class="button" style="background: #ffa500;">🇪🇺 EU-Rechnungen (ganzes Jahr) ohne Steuer generieren</button>
                 <p style="font-size: 12px; color: #666; margin-top: 10px;">
                     ✓ Kunden werden NICHT benachrichtigt<br>
-                    ✓ Nur Bestellungen aus EU-Ländern (außer AT)
+                    ✓ Nur Bestellungen aus EU-Ländern (außer AT)<br>
+                    ✓ Verarbeitet das komplette Jahr
                 </p>
             </form>
         </div>
@@ -145,6 +129,10 @@ $eu_countries = array(
     'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL',
     'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
 );
+
+// Initialisiere Variablen (werden später gesetzt wenn year Parameter vorhanden)
+$regenerate_eu = false;
+$no_tax_eu = false;
 
 // Bulk-Generierung für einen Monat oder EU-Regenerierung
 if (isset($_GET['year'])) {
@@ -332,6 +320,14 @@ foreach ($order_ids as $current_order_id) {
     $is_eu_order = in_array($billing_country, $eu_countries);
     $hide_tax = ($no_tax_eu && $is_eu_order);
 
+    // Debug für Tax-Handling
+    echo '<script>';
+    echo 'console.log("Order #' . $current_order_id . ' - Land:", "' . $billing_country . '");';
+    echo 'console.log("  no_tax_eu:", ' . ($no_tax_eu ? 'true' : 'false') . ');';
+    echo 'console.log("  is_eu_order:", ' . ($is_eu_order ? 'true' : 'false') . ');';
+    echo 'console.log("  hide_tax:", ' . ($hide_tax ? 'true' : 'false') . ');';
+    echo '</script>';
+
     echo '<div style="border: 1px solid #ddd; padding: 15px; margin: 15px 0; background: #fff;">';
     echo '<h3>Order #' . $current_order_id . ' - ' . $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() . '</h3>';
 
@@ -339,7 +335,7 @@ foreach ($order_ids as $current_order_id) {
     if ($regenerate_eu || $no_tax_eu) {
         $country_flag = $is_eu_order ? '🇪🇺' : '🏳️';
         $country_style = $is_eu_order ? 'background: #fff3cd; color: #856404;' : 'background: #e7f3ff; color: #004085;';
-        echo '<p style="' . $country_style . ' padding: 5px 10px; display: inline-block; border-radius: 3px; font-size: 12px;">' . $country_flag . ' Land: <strong>' . $billing_country . '</strong>' . ($hide_tax ? ' → Steuer wird ausgeblendet' : '') . '</p>';
+        echo '<p style="' . $country_style . ' padding: 5px 10px; display: inline-block; border-radius: 3px; font-size: 12px;">' . $country_flag . ' Land: <strong>' . $billing_country . '</strong>' . ($hide_tax ? ' → Steuer wird ausgeblendet' : ($is_eu_order ? ' (EU-Land)' : ' (Kein EU-Land - AT bleibt)')) . '</p>';
     }
 
     // Setze Rechnungsnummer
