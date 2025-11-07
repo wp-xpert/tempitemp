@@ -98,7 +98,7 @@ if (isset($_GET['month'])) {
         'limit' => -1,
         'date_created' => '>=' . $start_timestamp,
         'date_created_before' => '<=' . $end_timestamp,
-        'status' => array('completed', 'processing', 'on-hold'), // Ohne 'wc-' Präfix
+        'status' => array('pending', 'on-hold', 'processing', 'completed'), // Alle Status inkl. pending
         'orderby' => 'date',
         'order' => 'ASC'
     ));
