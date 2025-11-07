@@ -2,7 +2,7 @@
 /**
  * PDF Generator für Order #17357
  *
- * Minimalistisch - nutzt woocommerce-pdf-invoice Plugin
+ * Nutzt das Original-Template von woocommerce-pdf-invoice Plugin
  * Speichert PDFs im WordPress uploads Ordner
  * Aufruf: /wp-content/plugins/pdf-generator-17357/generate.php
  */
@@ -38,6 +38,13 @@ if (!is_dir($wc_pdf_plugin)) {
 require_once($wc_pdf_plugin . '/classes/class-pdf-functions-class.php');
 require_once($wc_pdf_plugin . '/classes/helper-functions-class.php');
 
+// Lade Plugin-Einstellungen
+$settings = get_option('woocommerce_pdf_invoice_settings');
+if (empty($settings)) {
+    die('❌ Plugin-Einstellungen nicht gefunden!');
+}
+echo '✓ Plugin-Einstellungen geladen<br>';
+
 // Setze Rechnungsnummer
 if (!$order->get_meta('_invoice_number_display', true)) {
     WC_pdf_functions::set_invoice_number($order_id);
@@ -69,7 +76,158 @@ echo '<hr>';
 
 // PDF generieren
 try {
-    // Nutze Dompdf direkt
+    // Lade Template
+    $template_file = $wc_pdf_plugin . '/templates/template.php';
+    if (!file_exists($template_file)) {
+        die('❌ Template nicht gefunden: ' . $template_file);
+    }
+
+    $template = file_get_contents($template_file);
+    echo '✓ Template geladen<br>';
+
+    // Baue Platzhalter-Ersetzungen
+    $replacements = array();
+
+    // PDF Font Family
+    $pdf_font_family = isset($settings['pdf_font_family']) ? $settings['pdf_font_family'] : 'dejavusanscondensed';
+    $replacements['[[PDFFONTFAMILY]]'] = $pdf_font_family;
+
+    // Logo
+    $logo_html = '';
+    if (!empty($settings['logo_file'])) {
+        $logo_html = '<img src="' . esc_url($settings['logo_file']) . '" alt="Logo" />';
+    }
+    $replacements['[[PDFLOGO]]'] = $logo_html;
+
+    // Company Info
+    $replacements['[[PDFCOMPANYNAME]]'] = isset($settings['pdf_company_name']) ? nl2br(esc_html($settings['pdf_company_name'])) : '';
+    $replacements['[[PDFCOMPANYDETAILS]]'] = isset($settings['pdf_company_details']) ? nl2br(esc_html($settings['pdf_company_details'])) : '';
+
+    // Invoice Number
+    $replacements['[[PDFINVOICENUMHEADING]]'] = __('Invoice Number', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICENUM]]'] = '<strong>' . esc_html($invoice_number) . '</strong>';
+
+    // Order Number
+    $replacements['[[PDFORDERENUMHEADING]]'] = __('Order Number', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFORDERENUM]]'] = esc_html($order->get_order_number());
+
+    // Dates
+    $invoice_date = $order->get_meta('_invoice_date', true);
+    if (empty($invoice_date)) {
+        $date_format = isset($settings['pdf_date_format']) ? $settings['pdf_date_format'] : 'd.m.Y';
+        $invoice_date = $order->get_date_created()->date($date_format);
+    }
+    $replacements['[[PDFINVOICEDATEHEADING]]'] = __('Invoice Date', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICEDATE]]'] = esc_html($invoice_date);
+    $replacements['[[PDFORDERDATEHEADING]]'] = __('Order Date', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFORDERDATE]]'] = $order->get_date_created()->date('d.m.Y');
+
+    // Payment & Shipping Method
+    $replacements['[[PDFINVOICE_PAYMETHOD_HEADING]]'] = __('Payment Method', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFINVOICEPAYMENTMETHOD]]'] = esc_html($order->get_payment_method_title());
+    $replacements['[[PDFINVOICE_SHIPMETHOD_HEADING]]'] = __('Shipping Method', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFSHIPPINGMETHOD]]'] = esc_html($order->get_shipping_method());
+    $replacements['[[PDFSHIPMENTTRACKING]]'] = '';
+
+    // Billing Details
+    $replacements['[[PDFINVOICE_BILLINGDETAILS_HEADING]]'] = __('Billing Address', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFBILLINGADDRESS]]'] = nl2br(esc_html($order->get_formatted_billing_address()));
+    $replacements['[[PDFBILLINGTEL]]'] = $order->get_billing_phone() ? 'Tel: ' . esc_html($order->get_billing_phone()) : '';
+    $replacements['[[PDFBILLINGEMAIL]]'] = esc_html($order->get_billing_email());
+    $replacements['[[PDFBILLINGVATNUMBER]]'] = '';
+
+    // Shipping Details
+    $replacements['[[PDFINVOICE_SHIPPINGDETAILS_HEADING]]'] = __('Shipping Address', 'woocommerce-pdf-invoice');
+    $replacements['[[PDFSHIPPINGADDRESS]]'] = $order->get_formatted_shipping_address() ? nl2br(esc_html($order->get_formatted_shipping_address())) : __('Same as billing', 'woocommerce-pdf-invoice');
+
+    // Footer - Company Registration
+    $registered_name = isset($settings['pdf_registered_name']) ? $settings['pdf_registered_name'] : '';
+    $registered_address = isset($settings['pdf_registered_address']) ? $settings['pdf_registered_address'] : '';
+    $company_number = isset($settings['pdf_company_number']) ? $settings['pdf_company_number'] : '';
+    $tax_number = isset($settings['pdf_tax_number']) ? $settings['pdf_tax_number'] : '';
+
+    $replacements['[[PDFREGISTEREDNAME_SECTION]]'] = $registered_name ? esc_html($registered_name) : '';
+    $replacements['[[PDFREGISTEREDADDRESS_SECTION]]'] = $registered_address ? esc_html($registered_address) : '';
+    $replacements['[[PDFCOMPANYNUMBER_SECTION]]'] = $company_number ? __('Company Number:', 'woocommerce-pdf-invoice') . ' ' . esc_html($company_number) : '';
+    $replacements['[[PDFTAXNUMBER_SECTION]]'] = $tax_number ? __('Tax Number:', 'woocommerce-pdf-invoice') . ' ' . esc_html($tax_number) : '';
+
+    // Order Items
+    $orderinfo_html = '<table width="100%" cellpadding="5" cellspacing="0" style="border: 1px solid #ddd;">
+        <thead>
+            <tr style="background: #0073aa; color: white;">
+                <th style="text-align: left; padding: 10px;">' . __('Product', 'woocommerce-pdf-invoice') . '</th>
+                <th style="text-align: center; padding: 10px; width: 10%;">' . __('Qty', 'woocommerce-pdf-invoice') . '</th>
+                <th style="text-align: right; padding: 10px; width: 15%;">' . __('Price', 'woocommerce-pdf-invoice') . '</th>
+                <th style="text-align: right; padding: 10px; width: 15%;">' . __('Total', 'woocommerce-pdf-invoice') . '</th>
+            </tr>
+        </thead>
+        <tbody>';
+
+    foreach ($order->get_items() as $item) {
+        $product_name = $item->get_name();
+        $quantity = $item->get_quantity();
+        $subtotal = $order->get_item_subtotal($item, true, false);
+        $total = $order->get_line_subtotal($item, true, false);
+
+        $orderinfo_html .= '<tr>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd;">' . esc_html($product_name) . '</td>
+            <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">' . $quantity . '</td>
+            <td style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">' . wc_price($subtotal, array('currency' => $order->get_currency())) . '</td>
+            <td style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">' . wc_price($total, array('currency' => $order->get_currency())) . '</td>
+        </tr>';
+    }
+
+    $orderinfo_html .= '</tbody>
+    </table>';
+
+    $replacements['[[ORDERINFOHEADER]]'] = '';
+    $replacements['[[ORDERINFO]]'] = $orderinfo_html;
+    $replacements['[[PDFBARCODES]]'] = '';
+
+    // Order Totals
+    $totals_html = '<tr>
+        <td style="text-align: right; padding: 5px 0;"><strong>' . __('Subtotal:', 'woocommerce-pdf-invoice') . '</strong></td>
+        <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_subtotal(), array('currency' => $order->get_currency())) . '</td>
+    </tr>';
+
+    if ($order->get_shipping_total() > 0) {
+        $totals_html .= '<tr>
+            <td style="text-align: right; padding: 5px 0;"><strong>' . __('Shipping:', 'woocommerce-pdf-invoice') . '</strong></td>
+            <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_shipping_total(), array('currency' => $order->get_currency())) . '</td>
+        </tr>';
+    }
+
+    if ($order->get_total_tax() > 0) {
+        $totals_html .= '<tr>
+            <td style="text-align: right; padding: 5px 0;"><strong>' . __('Tax:', 'woocommerce-pdf-invoice') . '</strong></td>
+            <td style="text-align: right; padding: 5px 0;">' . wc_price($order->get_total_tax(), array('currency' => $order->get_currency())) . '</td>
+        </tr>';
+    }
+
+    $totals_html .= '<tr style="background: #0073aa; color: white;">
+        <td style="text-align: right; padding: 10px;"><strong>' . __('Total:', 'woocommerce-pdf-invoice') . '</strong></td>
+        <td style="text-align: right; padding: 10px;"><strong>' . wc_price($order->get_total(), array('currency' => $order->get_currency())) . '</strong></td>
+    </tr>';
+
+    $replacements['[[PDFORDERTOTALS]]'] = $totals_html;
+    $replacements['[[PDFORDERNOTES]]'] = $order->get_customer_note() ? '<p><strong>' . __('Order Notes:', 'woocommerce-pdf-invoice') . '</strong><br>' . nl2br(esc_html($order->get_customer_note())) . '</p>' : '';
+
+    // CSS Placeholders
+    $replacements['[[PDFPAIDINFULLOVERLAY]]'] = '';
+    $replacements['[[PDFCURRENCYSYMBOLFONT]]'] = '';
+    $replacements['[[PDFINVOICEADDITIONALCSS]]'] = '';
+    $replacements['[[PDFRTL]]'] = '';
+
+    // Ersetze alle Platzhalter
+    $html = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+    echo '✓ HTML generiert (' . strlen($html) . ' Zeichen)<br>';
+
+    // PDF Generator ermitteln
+    $pdf_generator = isset($settings['pdf_generator']) ? $settings['pdf_generator'] : 'dompdf';
+    echo '✓ PDF Generator: ' . $pdf_generator . '<br>';
+
+    // PDF erstellen mit Dompdf (MPDF nicht verfügbar)
     $dompdf_autoload = $wc_pdf_plugin . '/lib/dompdf/autoload.inc.php';
 
     if (!file_exists($dompdf_autoload)) {
@@ -79,100 +237,7 @@ try {
     require_once($dompdf_autoload);
     echo '✓ Dompdf geladen<br>';
 
-    // Generiere HTML
-    $html = '<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11pt; color: #333; }
-        h1 { color: #0073aa; border-bottom: 3px solid #0073aa; padding-bottom: 10px; margin-bottom: 20px; }
-        h2 { color: #555; font-size: 14pt; margin-top: 20px; margin-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th { background: #0073aa; color: white; padding: 12px 8px; text-align: left; }
-        td { padding: 10px 8px; border-bottom: 1px solid #ddd; }
-        tbody tr:nth-child(even) { background: #f9f9f9; }
-        .grand-total { background: #0073aa; color: white; font-size: 14pt; }
-    </style>
-</head>
-<body>
-    <h1>RECHNUNG ' . htmlspecialchars($invoice_number) . '</h1>
-
-    <p><strong>Bestellnummer:</strong> ' . htmlspecialchars($order->get_order_number()) . '<br>
-    <strong>Datum:</strong> ' . $order->get_date_created()->date('d.m.Y H:i') . '<br>
-    <strong>Zahlungsmethode:</strong> ' . htmlspecialchars($order->get_payment_method_title()) . '</p>
-
-    <h2>Rechnungsadresse</h2>
-    <p>' . nl2br(htmlspecialchars($order->get_formatted_billing_address())) . '<br>
-    <strong>E-Mail:</strong> ' . htmlspecialchars($order->get_billing_email()) . '</p>';
-
-    if ($order->get_formatted_shipping_address()) {
-        $html .= '<h2>Lieferadresse</h2>
-        <p>' . nl2br(htmlspecialchars($order->get_formatted_shipping_address())) . '</p>';
-    }
-
-    $html .= '<h2>Bestellte Artikel</h2>
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 50%">Produkt</th>
-                <th style="width: 15%; text-align: center">Menge</th>
-                <th style="width: 17.5%; text-align: right">Einzelpreis</th>
-                <th style="width: 17.5%; text-align: right">Gesamt</th>
-            </tr>
-        </thead>
-        <tbody>';
-
-    foreach ($order->get_items() as $item) {
-        $product_name = $item->get_name();
-        $quantity = $item->get_quantity();
-        $subtotal = $order->get_item_subtotal($item, false, false);
-        $total = $order->get_line_subtotal($item, false, false);
-
-        $html .= '<tr>
-            <td>' . htmlspecialchars($product_name) . '</td>
-            <td style="text-align: center">' . $quantity . '</td>
-            <td style="text-align: right">' . number_format($subtotal, 2, ',', '.') . ' ' . $order->get_currency() . '</td>
-            <td style="text-align: right">' . number_format($total, 2, ',', '.') . ' ' . $order->get_currency() . '</td>
-        </tr>';
-    }
-
-    $html .= '</tbody>
-        <tfoot>
-            <tr>
-                <td colspan="3" style="text-align: right"><strong>Zwischensumme:</strong></td>
-                <td style="text-align: right">' . number_format($order->get_subtotal(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
-            </tr>';
-
-    if ($order->get_shipping_total() > 0) {
-        $html .= '<tr>
-            <td colspan="3" style="text-align: right"><strong>Versand:</strong></td>
-            <td style="text-align: right">' . number_format($order->get_shipping_total(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
-        </tr>';
-    }
-
-    if ($order->get_total_tax() > 0) {
-        $html .= '<tr>
-            <td colspan="3" style="text-align: right"><strong>MwSt.:</strong></td>
-            <td style="text-align: right">' . number_format($order->get_total_tax(), 2, ',', '.') . ' ' . $order->get_currency() . '</td>
-        </tr>';
-    }
-
-    $html .= '<tr class="grand-total">
-            <td colspan="3" style="text-align: right; padding: 15px 8px"><strong>GESAMT:</strong></td>
-            <td style="text-align: right; padding: 15px 8px"><strong>' . number_format($order->get_total(), 2, ',', '.') . ' ' . $order->get_currency() . '</strong></td>
-        </tr>
-        </tfoot>
-    </table>
-
-    <p style="margin-top: 40px; color: #666;"><em>Vielen Dank für Ihren Einkauf!</em></p>
-</body>
-</html>';
-
-    echo '✓ HTML generiert (' . strlen($html) . ' Zeichen)<br>';
-
-    // PDF erstellen
-    $dompdf = new Dompdf\Dompdf();
+    $dompdf = new Dompdf\Dompdf(array('enable_remote' => true));
     $dompdf->loadHtml($html);
     $dompdf->setPaper('A4', 'portrait');
     $dompdf->render();
