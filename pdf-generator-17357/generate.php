@@ -1,10 +1,14 @@
 <?php
 /**
- * PDF Generator für Order #17357
+ * PDF Generator für WooCommerce Bestellungen
  *
  * Nutzt das Original-Template von woocommerce-pdf-invoice Plugin
  * Speichert PDFs im WordPress uploads Ordner
- * Aufruf: /wp-content/plugins/pdf-generator-17357/generate.php
+ *
+ * SICHERHEIT: Erfordert Secret-Parameter für Zugriff
+ * Aufruf: /wp-content/plugins/pdf-generator-17357/generate.php?secret=mhh2025secure
+ *
+ * Secret kann in Zeile 22 geändert werden
  */
 
 // WordPress laden
@@ -16,6 +20,16 @@ ini_set('display_errors', 1);
 
 // Prüfungen
 if (!function_exists('wc_get_order')) die('WooCommerce nicht aktiv!');
+
+// SICHERHEIT: Secret-Key Prüfung
+// Ändere diesen Wert zu einem sicheren, zufälligen String
+define('PDF_GENERATOR_SECRET', 'mhh2025secure');
+
+// Prüfe ob Secret korrekt ist
+if (!isset($_GET['secret']) || $_GET['secret'] !== PDF_GENERATOR_SECRET) {
+    http_response_code(403);
+    die('403 Forbidden - Invalid access token');
+}
 
 // E-Mails blockieren
 add_filter('woocommerce_email_enabled', '__return_false', 999);
@@ -45,6 +59,7 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
         <div class="box">
             <h2>Einzelne Rechnung generieren</h2>
             <form method="get">
+                <input type="hidden" name="secret" value="<?php echo esc_attr(PDF_GENERATOR_SECRET); ?>">
                 <label>Order ID:</label>
                 <input type="number" name="order_id" value="17357" required>
                 <br><br>
@@ -55,6 +70,7 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
         <div class="box">
             <h2>Alle Rechnungen eines Jahres</h2>
             <form method="get">
+                <input type="hidden" name="secret" value="<?php echo esc_attr(PDF_GENERATOR_SECRET); ?>">
                 <label>Jahr wählen:</label>
                 <select name="year" required style="margin-bottom: 15px;">
                     <option value="">-- Jahr wählen --</option>
@@ -80,6 +96,7 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
                 Diese Option generiert ALLE Rechnungen von EU-Kunden des gewählten Jahres ohne Steuerangabe neu.
             </p>
             <form method="get">
+                <input type="hidden" name="secret" value="<?php echo esc_attr(PDF_GENERATOR_SECRET); ?>">
                 <input type="hidden" name="regenerate_eu" value="1">
                 <input type="hidden" name="no_tax_eu" value="1">
 
@@ -715,6 +732,6 @@ if ($success_count > 1 && isset($_GET['year'])) {
     }
 }
 
-echo '<p style="margin-top: 30px;"><a href="?" style="background: #666; color: white; padding: 12px 30px; text-decoration: none; display: inline-block; border-radius: 5px;">← Zurück zum Generator</a></p>';
+echo '<p style="margin-top: 30px;"><a href="?secret=' . urlencode(PDF_GENERATOR_SECRET) . '" style="background: #666; color: white; padding: 12px 30px; text-decoration: none; display: inline-block; border-radius: 5px;">← Zurück zum Generator</a></p>';
 
 echo '<p style="color: #999; font-size: 12px; margin-top: 30px;">Generiert am: ' . date('d.m.Y H:i:s') . '</p>';
