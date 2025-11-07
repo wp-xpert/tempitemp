@@ -88,35 +88,6 @@ if (!isset($_GET['order_id']) && !isset($_GET['year'])) {
                 <button type="submit" class="button">Alle PDFs des Jahres generieren</button>
             </form>
         </div>
-
-        <div class="box" style="background: #fff8dc; border: 2px solid #ffa500;">
-            <h2>🇪🇺 Alle EU-Rechnungen neu generieren (ohne Steuer)</h2>
-            <p style="font-size: 14px; color: #666;">
-                <strong>Wichtig:</strong> Für EU-Länder (außer Österreich) darf keine Steuer ausgewiesen werden.<br>
-                Diese Option generiert ALLE Rechnungen von EU-Kunden des gewählten Jahres ohne Steuerangabe neu.
-            </p>
-            <form method="get">
-                <input type="hidden" name="secret" value="<?php echo esc_attr(PDF_GENERATOR_SECRET); ?>">
-                <input type="hidden" name="regenerate_eu" value="1">
-                <input type="hidden" name="no_tax_eu" value="1">
-
-                <label>Jahr wählen:</label>
-                <select name="year" required style="margin-bottom: 15px;">
-                    <option value="">-- Jahr wählen --</option>
-                    <option value="2024">2024</option>
-                    <option value="2025" selected>2025</option>
-                    <option value="2026">2026</option>
-                </select>
-
-                <br><br>
-                <button type="submit" class="button" style="background: #ffa500;">🇪🇺 EU-Rechnungen (ganzes Jahr) ohne Steuer generieren</button>
-                <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                    ✓ Kunden werden NICHT benachrichtigt<br>
-                    ✓ Nur Bestellungen aus EU-Ländern (außer AT)<br>
-                    ✓ Verarbeitet das komplette Jahr
-                </p>
-            </form>
-        </div>
     </body>
     </html>
     <?php
