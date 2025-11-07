@@ -60,6 +60,7 @@ class FPDF {
     protected $AliasNbPages;
     protected $ZoomMode;
     protected $LayoutMode;
+    protected $PDFVersion;
     protected $title;
     protected $subject;
     protected $author;
@@ -90,6 +91,7 @@ class FPDF {
         $this->TextColor = '0 g';
         $this->ColorFlag = false;
         $this->ws = 0;
+        $this->PDFVersion = '1.3';
 
         $this->CoreFonts = array('courier'=>'Courier','courierB'=>'Courier-Bold','courierI'=>'Courier-Oblique','courierBI'=>'Courier-BoldOblique',
             'helvetica'=>'Helvetica','helveticaB'=>'Helvetica-Bold','helveticaI'=>'Helvetica-Oblique','helveticaBI'=>'Helvetica-BoldOblique',
@@ -343,6 +345,33 @@ class FPDF {
             $this->_out(sprintf('%.2F w',$width*$this->k));
     }
 
+    function SetDrawColor($r, $g=-1, $b=-1) {
+        if(($r==0 && $g==0 && $b==0) || $g==-1)
+            $this->DrawColor = sprintf('%.3F G',$r/255);
+        else
+            $this->DrawColor = sprintf('%.3F %.3F %.3F RG',$r/255,$g/255,$b/255);
+        if($this->page>0)
+            $this->_out($this->DrawColor);
+    }
+
+    function SetFillColor($r, $g=-1, $b=-1) {
+        if(($r==0 && $g==0 && $b==0) || $g==-1)
+            $this->FillColor = sprintf('%.3F g',$r/255);
+        else
+            $this->FillColor = sprintf('%.3F %.3F %.3F rg',$r/255,$g/255,$b/255);
+        $this->ColorFlag = ($this->FillColor!=$this->TextColor);
+        if($this->page>0)
+            $this->_out($this->FillColor);
+    }
+
+    function SetTextColor($r, $g=-1, $b=-1) {
+        if(($r==0 && $g==0 && $b==0) || $g==-1)
+            $this->TextColor = sprintf('%.3F g',$r/255);
+        else
+            $this->TextColor = sprintf('%.3F %.3F %.3F rg',$r/255,$g/255,$b/255);
+        $this->ColorFlag = ($this->FillColor!=$this->TextColor);
+    }
+
     function SetX($x) {
         if($x>=0)
             $this->x = $x;
@@ -361,6 +390,14 @@ class FPDF {
     function SetXY($x, $y) {
         $this->SetY($y);
         $this->SetX($x);
+    }
+
+    function GetX() {
+        return $this->x;
+    }
+
+    function GetY() {
+        return $this->y;
     }
 
     function Output($name='', $dest='') {
